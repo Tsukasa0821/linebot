@@ -4,10 +4,10 @@ import hashlib
 import hmac
 import base64
 import datetime
-import re
 import requests
 from flask import Flask, request, abort
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 app = Flask(__name__)
 
@@ -19,8 +19,7 @@ NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_EXPENSE_DB_ID = os.environ.get("NOTION_EXPENSE_DB_ID", "")
 NOTION_TODO_DB_ID = os.environ.get("NOTION_TODO_DB_ID", "")
 
-# 初始化 Gemini
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 NOTION_HEADERS = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -148,122 +147,104 @@ def query_todos() -> str:
     return "📋 待辦清單\n" + "\n".join(lines)
 
 
-# ─── Gemini 工具定義 ────────────────────────────────────
-TOOLS_SCHEMA = [
-    {
-        "function_declarations": [
-            {
-                "name": "add_expense",
-                "description": "記錄一筆消費。當使用者說花了多少錢、買了什麼時使用。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "amount": {"type": "integer", "description": "金額（台幣整數）"},
-                        "category": {
-                            "type": "string",
-                            "description": "分類：餐飲、交通、購物、娛樂、醫療、工作、其他 其中之一",
-                        },
-                        "note": {"type": "string", "description": "消費說明，例如午餐、計程車"},
-                    },
-                    "required": ["amount", "category", "note"],
+# ─── 工具定義 ───────────────────────────────────────────
+TOOLS = [
+    types.Tool(function_declarations=[
+        types.FunctionDeclaration(
+            name="add_expense",
+            description="記錄一筆消費。當使用者說花了多少錢、買了什麼時使用。",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "amount": types.Schema(type=types.Type.INTEGER, description="金額（台幣整數）"),
+                    "category": types.Schema(type=types.Type.STRING, description="分類：餐飲、交通、購物、娛樂、醫療、工作、其他"),
+                    "note": types.Schema(type=types.Type.STRING, description="消費說明"),
                 },
-            },
-            {
-                "name": "query_expenses",
-                "description": "查詢花費紀錄。當使用者問花了多少錢時使用。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "period": {
-                            "type": "string",
-                            "description": "查詢期間：today=今天, week=本週, month=本月",
-                        }
-                    },
-                    "required": ["period"],
+                required=["amount", "category", "note"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="query_expenses",
+            description="查詢花費紀錄。當使用者問花了多少錢時使用。",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "period": types.Schema(type=types.Type.STRING, description="today=今天, week=本週, month=本月"),
                 },
-            },
-            {
-                "name": "add_todo",
-                "description": "新增待辦事項。當使用者說要記得做某事時使用。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string", "description": "待辦事項標題"},
-                        "note": {"type": "string", "description": "備註（可空白）"},
-                    },
-                    "required": ["title"],
+                required=["period"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="add_todo",
+            description="新增待辦事項。當使用者說要記得做某事時使用。",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "title": types.Schema(type=types.Type.STRING, description="待辦事項標題"),
+                    "note": types.Schema(type=types.Type.STRING, description="備註"),
                 },
-            },
-            {
-                "name": "query_todos",
-                "description": "查詢未完成的待辦清單。",
-                "parameters": {"type": "object", "properties": {}},
-            },
-        ]
-    }
+                required=["title"],
+            ),
+        ),
+        types.FunctionDeclaration(
+            name="query_todos",
+            description="查詢未完成的待辦清單。",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={}),
+        ),
+    ])
 ]
 
 SYSTEM_PROMPT = """你是用戶的個人 LINE 助理，名字叫「小飛」。
-你的工作：
-1. 幫他記帳、查帳（用 add_expense / query_expenses 工具）
-2. 幫他管理待辦（用 add_todo / query_todos 工具）
-3. 回答任何工作或生活問題
-
-規則：
-- 用繁體中文回覆，語氣輕鬆自然
-- 看到金額就直接記帳，不要多問
-- 看到待辦需求就直接新增，不要多問
-- 回覆簡短有力，執行完工具一句話確認就好"""
-
-# ─── 執行工具 ───────────────────────────────────────────
-def run_tool(name: str, args: dict) -> str:
-    if name == "add_expense":
-        return add_expense(**args)
-    elif name == "query_expenses":
-        return query_expenses(**args)
-    elif name == "add_todo":
-        return add_todo(**args)
-    elif name == "query_todos":
-        return query_todos()
-    return "未知工具"
+工作：幫他記帳、查帳、管理待辦、回答任何問題。
+規則：用繁體中文回覆，語氣輕鬆自然，看到金額直接記帳，看到待辦直接新增，回覆簡短有力。"""
 
 # ─── 對話處理 ───────────────────────────────────────────
 def handle_message(user_text: str) -> str:
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-002",
+    config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
-        tools=TOOLS_SCHEMA,
+        tools=TOOLS,
     )
-    chat = model.start_chat()
 
-    response = chat.send_message(user_text)
+    contents = [types.Content(role="user", parts=[types.Part(text=user_text)])]
 
-    # 最多跑 3 輪處理工具呼叫
     for _ in range(3):
-        # 找出所有工具呼叫
-        tool_calls = []
-        for part in response.parts:
-            if hasattr(part, "function_call") and part.function_call.name:
-                tool_calls.append(part.function_call)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            config=config,
+            contents=contents,
+        )
+
+        candidate = response.candidates[0]
+        tool_calls = [p for p in candidate.content.parts if p.function_call]
 
         if not tool_calls:
-            # 沒有工具呼叫，直接回傳文字
             return response.text
 
-        # 執行所有工具，收集結果
-        tool_responses = []
-        for fc in tool_calls:
-            result = run_tool(fc.name, dict(fc.args))
-            tool_responses.append(
-                genai.protos.Part(
-                    function_response=genai.protos.FunctionResponse(
-                        name=fc.name,
-                        response={"result": result},
-                    )
-                )
-            )
+        # 執行工具
+        contents.append(candidate.content)
+        tool_results = []
+        for part in tool_calls:
+            fc = part.function_call
+            args = dict(fc.args)
+            if fc.name == "add_expense":
+                result = add_expense(**args)
+            elif fc.name == "query_expenses":
+                result = query_expenses(**args)
+            elif fc.name == "add_todo":
+                result = add_todo(**args)
+            elif fc.name == "query_todos":
+                result = query_todos()
+            else:
+                result = "未知工具"
 
-        response = chat.send_message(tool_responses)
+            tool_results.append(types.Part(
+                function_response=types.FunctionResponse(
+                    name=fc.name,
+                    response={"result": result},
+                )
+            ))
+
+        contents.append(types.Content(role="tool", parts=tool_results))
 
     return response.text
 
