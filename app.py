@@ -230,7 +230,7 @@ def run_tool(name: str, args: dict) -> str:
 # ─── 對話處理 ───────────────────────────────────────────
 def handle_message(user_text: str) -> str:
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-1.5-flash-latest",
         system_instruction=SYSTEM_PROMPT,
         tools=TOOLS_SCHEMA,
     )
