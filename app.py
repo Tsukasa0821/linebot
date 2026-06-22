@@ -5,6 +5,7 @@ import hmac
 import base64
 import datetime
 import requests
+import threading
 from flask import Flask, request, abort
 
 app = Flask(__name__)
@@ -65,7 +66,7 @@ def query_expenses(period: str = "month") -> str:
         return f"❌ 查詢失敗：{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "📭 這段期間沒有記帳紀錄"
+        return "὎d 這段期間沒有記帳紀錄"
     lines = []
     total = 0
     for r in results:
@@ -113,7 +114,6 @@ def query_todos() -> str:
         lines.append(f"{i}. {name}{note}")
     return "📋 待辦清單\n" + "\n".join(lines)
 
-
 def clear_expenses() -> str:
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
@@ -151,7 +151,6 @@ def clear_todos() -> str:
             json={"archived": True},
         )
     return f"✅ 已清空 {len(results)} 筆待辦事項"
-
 
 def delete_expense(keyword: str) -> str:
     res = requests.post(
@@ -195,16 +194,16 @@ def delete_todo(keyword: str) -> str:
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}}, "required": ["amount", "category", "note"]}}},
-    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費", "parameters": {"type": "object", "properties": {"period": {"type": "string"}}, "required": []}}},
-    {"type": "function", "function": {"name": "add_todo", "description": "新增待辦", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
+    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"}}, "required": []}}},
+    {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_expenses", "description": "清空/刪除全部記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_todos", "description": "清空/刪除全部待辦事項清單", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定的某筆記帳花費（依關鍵字搜尋名稱）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
-    {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋名稱）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},,,
+    {"type": "function", "function": {"name": "clear_expenses", "description": "清空刪除所有記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_todos", "description": "清空刪除所有待辦事項", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定的某筆記帳花費（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
 ]
 
-SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。【強制規則】：1.訊息含具體金額數字→呼叫 add_expense（無數字禁止呼叫）；2.訊息含待辦/提醒且無金額→呼叫 add_todo；3.查詢/顯示/有哪些/記錄/消費紀錄/花費 等詞→呼叫 query_expenses，今天用 period=today，本週用 week，其餘用 month；4.查詢待辦→呼叫 query_todos；5.清空/刪除全部花費→呼叫 clear_expenses；6.清空/刪除全部待辦→呼叫 clear_todos；7.刪除指定花費→呼叫 delete_expense(keyword)；8.刪除指定待辦→呼叫 delete_todo(keyword)。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
+SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。強制規則：1.訊息含具體金額數字才呼叫 add_expense，無數字禁止呼叫；2.訊息含待辦提醒且無金額才呼叫 add_todo；3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，其餘用 month；4.查詢待辦呼叫 query_todos；5.清空刪除全部花費呼叫 clear_expenses；6.清空刪除全部待辦呼叫 clear_todos；7.刪除指定花費呼叫 delete_expense；8.刪除指定待辦呼叫 delete_todo。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
@@ -238,7 +237,6 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
-    import logging
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_text},
@@ -257,8 +255,6 @@ def handle_message(user_text: str) -> str:
             result = run_tool(tc["function"]["name"], args)
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
     return msg.get("content", "處理完成")
-
-import threading
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
