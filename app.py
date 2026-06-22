@@ -204,7 +204,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋名稱）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},,,
 ]
 
-SYSTEM_PROMPT = "你是用戶的 LINE 記帳助理，名叫 Friday。【強制規則，不得違反】：1.訊息含金額→呼叫 add_expense；2.訊息含待辦/提醒→呼叫 add_todo；3.查詢花費/記帳/支出→呼叫 query_expenses；4.查詢待辦→呼叫 query_todos；5.清空/刪除全部花費或記帳→呼叫 clear_expenses；6.清空/刪除全部待辦→呼叫 clear_todos；7.刪除指定花費（含關鍵字）→呼叫 delete_expense；8.刪除指定待辦（含關鍵字）→呼叫 delete_todo。永遠呼叫工具，不得自行回答查詢或聲稱無此功能。繁體中文，回覆簡短。"
+SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。【強制規則】：1.訊息含具體金額數字→呼叫 add_expense（無數字禁止呼叫）；2.訊息含待辦/提醒且無金額→呼叫 add_todo；3.查詢/顯示/有哪些/記錄/消費紀錄/花費 等詞→呼叫 query_expenses，今天用 period=today，本週用 week，其餘用 month；4.查詢待辦→呼叫 query_todos；5.清空/刪除全部花費→呼叫 clear_expenses；6.清空/刪除全部待辦→呼叫 clear_todos；7.刪除指定花費→呼叫 delete_expense(keyword)；8.刪除指定待辦→呼叫 delete_todo(keyword)。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
