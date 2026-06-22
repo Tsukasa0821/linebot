@@ -120,7 +120,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
 ]
 
-SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「小飛」。用繁體中文回覆，語氣輕鬆，看到金額直接記帳，看到待辦直接新增，回覆簡短有力。"
+SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「Friday」。用繁體中文回覆，語氣輕鬆，看到金額直接記帳，看到待辦直接新增，回覆簡短有力。"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.1-8b-instant", "messages": messages}
