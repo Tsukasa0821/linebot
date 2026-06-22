@@ -146,12 +146,15 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
+    import logging
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_text},
     ]
     for _ in range(3):
         data = groq_chat(messages, TOOLS)
+        if "choices" not in data:
+            return f"Groq錯誤：{data}"
         msg = data["choices"][0]["message"]
         tool_calls = msg.get("tool_calls")
         if not tool_calls:
