@@ -146,11 +146,52 @@ def clear_todos() -> str:
         return "✅ 待辦本來就是空的"
     for r in results:
         requests.patch(
-            f"https://api.notion.com/v1/pages/{r['id']}",",
+            f"https://api.notion.com/v1/pages/{r['id']}",,
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
     return f"✅ 已清空 {len(results)} 筆待辦事項"
+
+
+def delete_expense(keyword: str) -> str:
+    res = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
+        headers=NOTION_HEADERS,
+        json={},
+    )
+    if res.status_code != 200:
+        return f"❌ 查詢失敗：{res.text}"
+    results = res.json().get("results", [])
+    matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+    if not matched:
+        return f"❌ 找不到含「{keyword}」的記帳記錄"
+    for r in matched:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",
+            headers=NOTION_HEADERS,
+            json={"archived": True},
+        )
+    return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的記帳記錄"
+
+def delete_todo(keyword: str) -> str:
+    res = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_TODO_DB_ID}/query",
+        headers=NOTION_HEADERS,
+        json={},
+    )
+    if res.status_code != 200:
+        return f"❌ 查詢失敗：{res.text}"
+    results = res.json().get("results", [])
+    matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+    if not matched:
+        return f"❌ 找不到含「{keyword}」的待辦事項"
+    for r in matched:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",
+            headers=NOTION_HEADERS,
+            json={"archived": True},
+        )
+    return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的待辦事項"
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}}, "required": ["amount", "category", "note"]}}},
@@ -158,7 +199,9 @@ TOOLS = [
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}}
     {"type": "function", "function": {"name": "clear_expenses", "description": "清空所有記帳記錄", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_todos", "description": "清空所有待辦事項", "parameters": {"type": "object", "properties": {}}}},,
+    {"type": "function", "function": {"name": "clear_todos", "description": "清空所有待辦事項", "parameters": {"type": "object", "properties": {}}}}
+    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定記帳記錄（依關鍵字）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定待辦事項（依關鍵字）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},,,
 ]
 
 SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「Friday」。用繁體中文回覆，語氣輕鬆。規則：1. 看到金額直接呼叫 add_expense 記帳；2. 看到待辦直接呼叫 add_todo；3. 查詢花費或記錄時，永遠呼叫 query_expenses 工具，不得從記憶回答；4. 查詢待辦時，永遠呼叫 query_todos 工具；5. 清空指令時呼叫對應 clear 工具；6. 回覆簡短有力。"
@@ -188,6 +231,10 @@ def run_tool(name: str, args: dict) -> str:
         return clear_expenses()
     elif name == "clear_todos":
         return clear_todos()
+    elif name == "delete_expense":
+        return delete_expense(**args)
+    elif name == "delete_todo":
+        return delete_todo(**args)
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
