@@ -161,7 +161,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "clear_todos", "description": "清空所有待辦事項", "parameters": {"type": "object", "properties": {}}}},,
 ]
 
-SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「Friday」。用繁體中文回覆，語氣輕鬆，看到金額直接記帳，看到待辦直接新增，回覆簡短有力。"
+SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「Friday」。用繁體中文回覆，語氣輕鬆。規則：1. 看到金額直接呼叫 add_expense 記帳；2. 看到待辦直接呼叫 add_todo；3. 查詢花費或記錄時，永遠呼叫 query_expenses 工具，不得從記憶回答；4. 查詢待辦時，永遠呼叫 query_todos 工具；5. 清空指令時呼叫對應 clear 工具；6. 回覆簡短有力。"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
