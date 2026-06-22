@@ -195,9 +195,9 @@ def delete_todo(keyword: str) -> str:
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}}, "required": ["amount", "category", "note"]}}},
-    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費", "parameters": {"type": "object", "properties": {"period": {"type": "string"}}, "required": ["period"]}}},
+    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費", "parameters": {"type": "object", "properties": {"period": {"type": "string"}}, "required": []}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
-    {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}}
+    {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "clear_expenses", "description": "清空/刪除全部記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "clear_todos", "description": "清空/刪除全部待辦事項清單", "parameters": {"type": "object", "properties": {}}}}
     {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定的某筆記帳花費（依關鍵字搜尋名稱）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
