@@ -113,11 +113,52 @@ def query_todos() -> str:
         lines.append(f"{i}. {name}{note}")
     return "📋 待辦清單\n" + "\n".join(lines)
 
+
+def clear_expenses() -> str:
+    res = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
+        headers=NOTION_HEADERS,
+        json={},
+    )
+    if res.status_code != 200:
+        return f"❌ 查詢失敗：{res.text}"
+    results = res.json().get("results", [])
+    if not results:
+        return "✅ 記帳本來就是空的"
+    for r in results:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",
+            headers=NOTION_HEADERS,
+            json={"archived": True},
+        )
+    return f"✅ 已清空 {len(results)} 筆記帳記錄"
+
+def clear_todos() -> str:
+    res = requests.post(
+        f"https://api.notion.com/v1/databases/{NOTION_TODO_DB_ID}/query",
+        headers=NOTION_HEADERS,
+        json={},
+    )
+    if res.status_code != 200:
+        return f"❌ 查詢失敗：{res.text}"
+    results = res.json().get("results", [])
+    if not results:
+        return "✅ 待辦本來就是空的"
+    for r in results:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",",
+            headers=NOTION_HEADERS,
+            json={"archived": True},
+        )
+    return f"✅ 已清空 {len(results)} 筆待辦事項"
+
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}}, "required": ["amount", "category", "note"]}}},
     {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費", "parameters": {"type": "object", "properties": {"period": {"type": "string"}}, "required": ["period"]}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
-    {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}}
+    {"type": "function", "function": {"name": "clear_expenses", "description": "清空所有記帳記錄", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_todos", "description": "清空所有待辦事項", "parameters": {"type": "object", "properties": {}}}},,
 ]
 
 SYSTEM_PROMPT = "你是用戶的個人LINE助理，名字叫「Friday」。用繁體中文回覆，語氣輕鬆，看到金額直接記帳，看到待辦直接新增，回覆簡短有力。"
@@ -143,6 +184,10 @@ def run_tool(name: str, args: dict) -> str:
         return add_todo(**args)
     elif name == "query_todos":
         return query_todos()
+    elif name == "clear_expenses":
+        return clear_expenses()
+    elif name == "clear_todos":
+        return clear_todos()
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
