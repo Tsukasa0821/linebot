@@ -26,13 +26,13 @@ def verify_signature(body: bytes, signature: str) -> bool:
     hash_ = hmac.new(LINE_CHANNEL_SECRET.encode("utf-8"), body, hashlib.sha256).digest()
     return hmac.compare_digest(base64.b64encode(hash_).decode("utf-8"), signature)
 
-def reply_message(reply_token: str, text: str):
+def push_message(user_id: str, text: str):
     chunks = [text[i:i+4999] for i in range(0, len(text), 4999)]
     messages = [{"type": "text", "text": chunk} for chunk in chunks[:5]]
     requests.post(
-        "https://api.line.me/v2/bot/message/reply",
+        "https://api.line.me/v2/bot/message/push",
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"},
-        json={"replyToken": reply_token, "messages": messages},
+        json={"to": user_id, "messages": messages},
     )
 
 def add_expense(amount: int, category: str, note: str) -> str:
@@ -258,6 +258,8 @@ def handle_message(user_text: str) -> str:
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
     return msg.get("content", "處理完成")
 
+import threading
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     body = request.get_data()
@@ -265,18 +267,20 @@ def webhook():
     if not verify_signature(body, signature):
         abort(400, "Invalid signature")
     events = json.loads(body).get("events", [])
-    for event in events:
-        if event.get("type") != "message":
-            continue
-        if event["message"].get("type") != "text":
-            continue
-        user_text = event["message"]["text"]
-        reply_token = event["replyToken"]
-        try:
-            reply = handle_message(user_text)
-        except Exception as e:
-            reply = f"⚠️ 出錯了：{str(e)}"
-        reply_message(reply_token, reply)
+    def process_events():
+        for event in events:
+            if event.get("type") != "message":
+                continue
+            if event["message"].get("type") != "text":
+                continue
+            user_text = event["message"]["text"]
+            user_id = event["source"]["userId"]
+            try:
+                reply = handle_message(user_text)
+            except Exception as e:
+                reply = f"⚠️ 出錯了：{str(e)}"
+            push_message(user_id, reply)
+    threading.Thread(target=process_events, daemon=True).start()
     return "OK"
 
 @app.route("/", methods=["GET"])
