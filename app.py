@@ -146,7 +146,7 @@ def clear_todos() -> str:
         return "✅ 待辦本來就是空的"
     for r in results:
         requests.patch(
-            f"https://api.notion.com/v1/pages/{r['id']}",,
+            f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
