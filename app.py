@@ -255,7 +255,7 @@ def handle_message(user_text: str) -> str:
                 rest = failed[start:]
                 name = rest[:rest.index("=")]
                 json_str = rest[rest.index("{"):rest.rindex("}")+1]
-                return run_tool(name, json.loads(json_str))
+                return run_tool(name, json.loads(json_str) or {})
             except Exception:
                 pass
         return f"Groq錯誤：{data}"
@@ -265,7 +265,7 @@ def handle_message(user_text: str) -> str:
         return msg.get("content") or "（無法理解指令）"
     results = []
     for tc in tool_calls:
-        args = json.loads(tc["function"]["arguments"])
+        args = json.loads(tc["function"]["arguments"]) or {}
         result = run_tool(tc["function"]["name"], args)
         results.append(result)
     return "\n".join(results)
