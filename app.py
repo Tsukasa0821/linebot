@@ -50,24 +50,33 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
     return f"✅ 已記帳（{expense_date}）" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
 
-def query_expenses(period: str = "month") -> str:
+def query_expenses(period: str = "month", date: str = None) -> str:
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
-    if period == "today":
+    if date:
+        filter_obj = {"property": "日期", "date": {"equals": date}}
+        label = date
+    elif period == "today":
         start = today.isoformat()
+        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
+        label = "今天"
     elif period == "week":
         start = (today - datetime.timedelta(days=today.weekday())).isoformat()
+        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
+        label = "本週"
     else:
         start = today.replace(day=1).isoformat()
+        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
+        label = "本月"
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
         headers=NOTION_HEADERS,
-        json={"filter": {"property": "日期", "date": {"on_or_after": start}}, "sorts": [{"property": "日期", "direction": "ascending"}]},
+        json={"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]},
     )
     if res.status_code != 200:
         return f"❌ 查詢失敗：{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "὎d 這段期間沒有記帳紀錄"
+        return "📭 這段期間沒有記帳紀錄"
     lines = []
     total = 0
     for r in results:
@@ -75,10 +84,9 @@ def query_expenses(period: str = "month") -> str:
         name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
         amount = props["金額"]["number"] or 0
         category = props["分類"]["select"]["name"] if props["分類"]["select"] else "其他"
-        date = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+        date_val = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
         total += amount
-        lines.append(f"  {date}  [{category}] {name}  ${amount}")
-    label = {"today": "今天", "week": "本週", "month": "本月"}.get(period, "本月")
+        lines.append(f"  {date_val}  [{category}] {name}  ${amount}")
     return f"📊 {label}花費\n" + "\n".join(lines) + f"\n\n💰 合計：${total}"
 
 def add_todo(title: str, note: str = "") -> str:
@@ -195,7 +203,7 @@ def delete_todo(keyword: str) -> str:
 
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}, "date": {"type": "string", "description": "消費日期，格式YYYY-MM-DD。若用戶提到過去時間（如上週五、昨天、三天前、上個月15號），必須根據系統提示中的今天日期計算出正確日期後填入。若未提到特定日期則不填。"}}, "required": ["amount", "category", "note"]}}},
-    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"}}, "required": []}}},
+    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"}, "date": {"type": "string", "description": "指定日期 YYYY-MM-DD，查詢該天花費，與period擇一"}}, "required": []}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "clear_expenses", "description": "清空刪除所有記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
@@ -204,7 +212,7 @@ TOOLS = [
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
 ]
 
-SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。強制規則：1.訊息含具體金額數字才呼叫 add_expense，無數字禁止呼叫；若提到過去時間（上週五、昨天等）必須先計算出正確日期（YYYY-MM-DD）再填入date參數，例如今天週一則上週五=今天-3天；2.訊息含待辦提醒且無金額才呼叫 add_todo；3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，其餘用 month；4.查詢待辦呼叫 query_todos；5.清空刪除全部花費呼叫 clear_expenses；6.清空刪除全部待辦呼叫 clear_todos；7.刪除指定花費呼叫 delete_expense；8.刪除指定待辦呼叫 delete_todo。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
+SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。強制規則：1.訊息含具體金額數字才呼叫 add_expense，無數字禁止呼叫；若提到過去時間（上週五、昨天等）必須先計算出正確日期（YYYY-MM-DD）再填入date參數，例如今天週一則上週五=今天-3天；2.訊息含待辦提醒且無金額才呼叫 add_todo；3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，本月用 month，指定日期（如2026/06/27、昨天）用 date=YYYY-MM-DD；4.查詢待辦呼叫 query_todos；5.清空刪除全部花費呼叫 clear_expenses；6.清空刪除全部待辦呼叫 clear_todos；7.刪除指定花費呼叫 delete_expense；8.刪除指定待辦呼叫 delete_todo。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
