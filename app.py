@@ -37,7 +37,7 @@ def push_message(user_id: str, text: str):
     )
 
 def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
-    expense_date = date if date else datetime.date.today().isoformat()
+    expense_date = date if date else (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")
     data = {
         "parent": {"database_id": NOTION_EXPENSE_DB_ID},
         "properties": {
@@ -51,7 +51,7 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
     return f"✅ 已記帳（{expense_date}）" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
 
 def query_expenses(period: str = "month") -> str:
-    today = datetime.date.today()
+    today = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
     if period == "today":
         start = today.isoformat()
     elif period == "week":
@@ -88,7 +88,7 @@ def add_todo(title: str, note: str = "") -> str:
             "名稱": {"title": [{"text": {"content": title}}]},
             "備註": {"rich_text": [{"text": {"content": note}}]},
             "狀態": {"select": {"name": "待辦"}},
-            "建立日期": {"date": {"start": datetime.date.today().isoformat()}},
+            "建立日期": {"date": {"start": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
@@ -238,9 +238,11 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
-    today = datetime.date.today().isoformat()
+    _now_tw = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+    today = _now_tw.strftime("%Y-%m-%d")
+    weekday = ["週一","週二","週三","週四","週五","週六","週日"][_now_tw.weekday()]
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT + f" 今天日期：{today}。"},
+        {"role": "system", "content": SYSTEM_PROMPT + f" 今天：{today}（{weekday}）。"},
         {"role": "user", "content": user_text},
     ]
     data = groq_chat(messages, TOOLS)
