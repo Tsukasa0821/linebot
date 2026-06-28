@@ -53,6 +53,7 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
 def query_expenses(period: str = "month", date: str = None) -> str:
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
     if date:
+        date = date.replace("/", "-")
         filter_obj = {"property": "日期", "date": {"equals": date}}
         label = date
     elif period == "today":
