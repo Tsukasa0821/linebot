@@ -41,88 +41,88 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
     data = {
         "parent": {"database_id": NOTION_EXPENSE_DB_ID},
         "properties": {
-            "名稱": {"title": [{"text": {"content": note}}]},
-            "金額": {"number": amount},
-            "分類": {"select": {"name": category}},
-            "日期": {"date": {"start": expense_date}},
+            "åç¨±": {"title": [{"text": {"content": note}}]},
+            "éé¡": {"number": amount},
+            "åé¡": {"select": {"name": category}},
+            "æ¥æ": {"date": {"start": expense_date}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
-    return f"✅ 已記帳（{expense_date}）" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
+    return f"â å·²è¨å¸³ï¼{expense_date}ï¼" if res.status_code == 200 else f"â è¨å¸³å¤±æï¼{res.text}"
 
 def query_expenses(period: str = "month", date: str = None) -> str:
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
     if date:
         date = date.replace("/", "-").replace(".", "-")
-        filter_obj = {"property": "日期", "date": {"equals": date}}
+        filter_obj = {"property": "æ¥æ", "date": {"equals": date}}
         label = date
     elif period == "today":
         start = today.isoformat()
-        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
-        label = "今天"
+        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
+        label = "ä»å¤©"
     elif period == "week":
         start = (today - datetime.timedelta(days=today.weekday())).isoformat()
-        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
-        label = "本週"
+        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
+        label = "æ¬é±"
     else:
         start = today.replace(day=1).isoformat()
-        filter_obj = {"property": "日期", "date": {"on_or_after": start}}
-        label = "本月"
+        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
+        label = "æ¬æ"
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
         headers=NOTION_HEADERS,
-        json={"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]},
+        json={"filter": filter_obj, "sorts": [{"property": "æ¥æ", "direction": "ascending"}]},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "📭 這段期間沒有記帳紀錄"
+        return "ð­ éæ®µæéæ²æè¨å¸³ç´é"
     lines = []
     total = 0
     for r in results:
         props = r["properties"]
-        name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
-        amount = props["金額"]["number"] or 0
-        category = props["分類"]["select"]["name"] if props["分類"]["select"] else "其他"
-        date_val = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+        name = props["åç¨±"]["title"][0]["plain_text"] if props["åç¨±"]["title"] else "ï¼ç¡ï¼"
+        amount = props["éé¡"]["number"] or 0
+        category = props["åé¡"]["select"]["name"] if props["åé¡"]["select"] else "å¶ä»"
+        date_val = props["æ¥æ"]["date"]["start"] if props["æ¥æ"]["date"] else ""
         total += amount
         lines.append(f"  {date_val}  [{category}] {name}  ${amount}")
-    return f"📊 {label}花費\n" + "\n".join(lines) + f"\n\n💰 合計：${total}"
+    return f"ð {label}è±è²»\n" + "\n".join(lines) + f"\n\nð° åè¨ï¼${total}"
 
 def add_todo(title: str, note: str = "") -> str:
     data = {
         "parent": {"database_id": NOTION_TODO_DB_ID},
         "properties": {
-            "名稱": {"title": [{"text": {"content": title}}]},
-            "備註": {"rich_text": [{"text": {"content": note}}]},
-            "狀態": {"select": {"name": "待辦"}},
-            "建立日期": {"date": {"start": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")}},
+            "åç¨±": {"title": [{"text": {"content": title}}]},
+            "åè¨»": {"rich_text": [{"text": {"content": note}}]},
+            "çæ": {"select": {"name": "å¾è¾¦"}},
+            "å»ºç«æ¥æ": {"date": {"start": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
-    return "✅ 待辦已新增" if res.status_code == 200 else f"❌ 新增失敗：{res.text}"
+    return "â å¾è¾¦å·²æ°å¢" if res.status_code == 200 else f"â æ°å¢å¤±æï¼{res.text}"
 
 def query_todos() -> str:
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_TODO_DB_ID}/query",
         headers=NOTION_HEADERS,
-        json={"filter": {"property": "狀態", "select": {"equals": "待辦"}}, "sorts": [{"property": "建立日期", "direction": "ascending"}]},
+        json={"filter": {"property": "çæ", "select": {"equals": "å¾è¾¦"}}, "sorts": [{"property": "å»ºç«æ¥æ", "direction": "ascending"}]},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "🎉 沒有待辦事項！"
+        return "ð æ²æå¾è¾¦äºé ï¼"
     lines = []
     for i, r in enumerate(results, 1):
         props = r["properties"]
-        name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
+        name = props["åç¨±"]["title"][0]["plain_text"] if props["åç¨±"]["title"] else "ï¼ç¡ï¼"
         note = ""
-        if props.get("備註") and props["備註"]["rich_text"]:
-            note = f"\n   └ {props['備註']['rich_text'][0]['plain_text']}"
+        if props.get("åè¨»") and props["åè¨»"]["rich_text"]:
+            note = f"\n   â {props['åè¨»']['rich_text'][0]['plain_text']}"
         lines.append(f"{i}. {name}{note}")
-    return "📋 待辦清單\n" + "\n".join(lines)
+    return "ð å¾è¾¦æ¸å®\n" + "\n".join(lines)
 
 def clear_expenses() -> str:
     res = requests.post(
@@ -131,17 +131,17 @@ def clear_expenses() -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "✅ 記帳本來就是空的"
+        return "â è¨å¸³æ¬ä¾å°±æ¯ç©ºç"
     for r in results:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"✅ 已清空 {len(results)} 筆記帳記錄"
+    return f"â å·²æ¸ç©º {len(results)} ç­è¨å¸³è¨é"
 
 def clear_todos() -> str:
     res = requests.post(
@@ -150,17 +150,17 @@ def clear_todos() -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "✅ 待辦本來就是空的"
+        return "â å¾è¾¦æ¬ä¾å°±æ¯ç©ºç"
     for r in results:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"✅ 已清空 {len(results)} 筆待辦事項"
+    return f"â å·²æ¸ç©º {len(results)} ç­å¾è¾¦äºé "
 
 def delete_expense(keyword: str) -> str:
     res = requests.post(
@@ -169,18 +169,18 @@ def delete_expense(keyword: str) -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
-    matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+    matched = [r for r in results if keyword in (r["properties"]["åç¨±"]["title"][0]["plain_text"] if r["properties"]["åç¨±"]["title"] else "")]
     if not matched:
-        return f"❌ 找不到含「{keyword}」的記帳記錄"
+        return f"â æ¾ä¸å°å«ã{keyword}ãçè¨å¸³è¨é"
     for r in matched:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的記帳記錄"
+    return f"â å·²åªé¤ {len(matched)} ç­å«ã{keyword}ãçè¨å¸³è¨é"
 
 def delete_todo(keyword: str) -> str:
     res = requests.post(
@@ -189,31 +189,31 @@ def delete_todo(keyword: str) -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"❌ 查詢失敗：{res.text}"
+        return f"â æ¥è©¢å¤±æï¼{res.text}"
     results = res.json().get("results", [])
-    matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+    matched = [r for r in results if keyword in (r["properties"]["åç¨±"]["title"][0]["plain_text"] if r["properties"]["åç¨±"]["title"] else "")]
     if not matched:
-        return f"❌ 找不到含「{keyword}」的待辦事項"
+        return f"â æ¾ä¸å°å«ã{keyword}ãçå¾è¾¦äºé "
     for r in matched:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的待辦事項"
+    return f"â å·²åªé¤ {len(matched)} ç­å«ã{keyword}ãçå¾è¾¦äºé "
 
 TOOLS = [
-    {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}, "date": {"type": "string", "description": "消費日期，格式YYYY-MM-DD。若用戶提到過去時間（如上週五、昨天、三天前、上個月15號），必須根據系統提示中的今天日期計算出正確日期後填入。若未提到特定日期則不填。"}}, "required": ["amount", "category", "note"]}}},
-    {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"}, "date": {"type": "string", "description": "查詢指定日期花費，無論用戶用何種表達（上週五、昨天、前天、六月二十七日、2026/06/27），都必須根據今天日期計算並轉換為 YYYY-MM-DD 格式填入此欄位"}}, "required": []}}},
-    {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
-    {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_expenses", "description": "清空刪除所有記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_todos", "description": "清空刪除所有待辦事項", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定的某筆記帳花費（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
-    {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "add_expense", "description": "è¨éä¸ç­æ¶è²»", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string", "description": "消費品項名稱，不可包含日期時間詞（昨天、前天、上週五等），只寫消費品項本身"}, "date": {"type": "string", "description": "æ¶è²»æ¥æï¼æ ¼å¼YYYY-MM-DDãè¥ç¨æ¶æå°éå»æéï¼å¦ä¸é±äºãæ¨å¤©ãä¸å¤©åãä¸åæ15èï¼ï¼å¿é æ ¹æç³»çµ±æç¤ºä¸­çä»å¤©æ¥æè¨ç®åºæ­£ç¢ºæ¥æå¾å¡«å¥ãè¥æªæå°ç¹å®æ¥æåä¸å¡«ã"}}, "required": ["amount", "category", "note"]}}},
+    {"type": "function", "function": {"name": "query_expenses", "description": "æ¥è©¢è±è²»ç´é", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=ä»å¤©, week=æ¬é±, month=æ¬æ"}, "date": {"type": "string", "description": "æ¥è©¢æå®æ¥æè±è²»ï¼ç¡è«ç¨æ¶ç¨ä½ç¨®è¡¨éï¼ä¸é±äºãæ¨å¤©ãåå¤©ãå­æäºåä¸æ¥ã2026/06/27ï¼ï¼é½å¿é æ ¹æä»å¤©æ¥æè¨ç®ä¸¦è½æçº YYYY-MM-DD æ ¼å¼å¡«å¥æ­¤æ¬ä½"}}, "required": []}}},
+    {"type": "function", "function": {"name": "add_todo", "description": "æ°å¢å¾è¾¦äºé ", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
+    {"type": "function", "function": {"name": "query_todos", "description": "æ¥è©¢å¾è¾¦æ¸å®", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_expenses", "description": "æ¸ç©ºåªé¤ææè¨å¸³è±è²»ç´é", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_todos", "description": "æ¸ç©ºåªé¤ææå¾è¾¦äºé ", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "delete_expense", "description": "åªé¤æå®çæç­è¨å¸³è±è²»ï¼ä¾ééµå­æå°ï¼", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "delete_todo", "description": "åªé¤æå®çæç­å¾è¾¦äºé ï¼ä¾ééµå­æå°ï¼", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
 ]
 
-SYSTEM_PROMPT = "你是 LINE 記帳助理 Friday。強制規則：1.訊息含具體金額數字才呼叫 add_expense，無數字禁止呼叫；若提到過去時間（上週五、昨天等）必須先計算出正確日期（YYYY-MM-DD）再填入date參數，例如今天週一則上週五=今天-3天；2.訊息含待辦提醒且無金額才呼叫 add_todo；3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，本月用 month，任何指定日期（無論是數字、中文、昨天前天上週五等）都先計算出YYYY-MM-DD再用 date 參數；4.查詢待辦呼叫 query_todos；5.清空刪除全部花費呼叫 clear_expenses；6.清空刪除全部待辦呼叫 clear_todos；7.刪除指定花費呼叫 delete_expense；8.刪除指定待辦呼叫 delete_todo。永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
+SYSTEM_PROMPT = "ä½ æ¯ LINE è¨å¸³å©ç Fridayãå¼·å¶è¦åï¼1.è¨æ¯å«å·é«éé¡æ¸å­æå¼å« add_expenseï¼ç¡æ¸å­ç¦æ­¢å¼å«ï¼è¥æå°éå»æéï¼ä¸é±äºãæ¨å¤©ç­ï¼å¿é åè¨ç®åºæ­£ç¢ºæ¥æï¼YYYY-MM-DDï¼åå¡«å¥dateåæ¸ï¼ä¾å¦ä»å¤©é±ä¸åä¸é±äº=ä»å¤©-3å¤©ï¼2.è¨æ¯å«å¾è¾¦æéä¸ç¡éé¡æå¼å« add_todoï¼3.æ¥è©¢è±è²»è¨å¸³æ¯åºè¨éç­è©å¼å« query_expensesï¼ä»å¤©ç¨ period=todayï¼æ¬é±ç¨ weekï¼æ¬æç¨ monthï¼ä»»ä½æå®æ¥æï¼ç¡è«æ¯æ¸å­ãä¸­æãæ¨å¤©åå¤©ä¸é±äºç­ï¼é½åè¨ç®åºYYYY-MM-DDåç¨ date åæ¸ï¼4.æ¥è©¢å¾è¾¦å¼å« query_todosï¼5.æ¸ç©ºåªé¤å¨é¨è±è²»å¼å« clear_expensesï¼6.æ¸ç©ºåªé¤å¨é¨å¾è¾¦å¼å« clear_todosï¼7.åªé¤æå®è±è²»å¼å« delete_expenseï¼8.åªé¤æå®å¾è¾¦å¼å« delete_todoãæ°¸é å¼å«å·¥å·ï¼ä¸å¾èªè¡åç­ãç¹é«ä¸­æï¼åè¦ç°¡ç­ã"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
@@ -244,14 +244,14 @@ def run_tool(name: str, args: dict) -> str:
         return delete_expense(**args)
     elif name == "delete_todo":
         return delete_todo(**args)
-    return "未知工具"
+    return "æªç¥å·¥å·"
 
 def handle_message(user_text: str) -> str:
     _now_tw = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     today = _now_tw.strftime("%Y-%m-%d")
-    weekday = ["週一","週二","週三","週四","週五","週六","週日"][_now_tw.weekday()]
+    weekday = ["é±ä¸","é±äº","é±ä¸","é±å","é±äº","é±å­","é±æ¥"][_now_tw.weekday()]
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT + f" 今天：{today}（{weekday}）。"},
+        {"role": "system", "content": SYSTEM_PROMPT + f" ä»å¤©ï¼{today}ï¼{weekday}ï¼ã"},
         {"role": "user", "content": user_text},
     ]
     data = groq_chat(messages, TOOLS)
@@ -267,11 +267,11 @@ def handle_message(user_text: str) -> str:
                 return run_tool(name, json.loads(json_str) or {})
             except Exception:
                 pass
-        return f"Groq錯誤：{data}"
+        return f"Groqé¯èª¤ï¼{data}"
     msg = data["choices"][0]["message"]
     tool_calls = msg.get("tool_calls")
     if not tool_calls:
-        return msg.get("content") or "（無法理解指令）"
+        return msg.get("content") or "ï¼ç¡æ³çè§£æä»¤ï¼"
     results = []
     for tc in tool_calls:
         args = json.loads(tc["function"]["arguments"]) or {}
@@ -297,14 +297,14 @@ def webhook():
             try:
                 reply = handle_message(user_text)
             except Exception as e:
-                reply = f"⚠️ 出錯了：{str(e)}"
+                reply = f"â ï¸ åºé¯äºï¼{str(e)}"
             push_message(user_id, reply)
     threading.Thread(target=process_events, daemon=True).start()
     return "OK"
 
 @app.route("/", methods=["GET"])
 def health():
-    return "小飛在線上 ✅"
+    return "å°é£å¨ç·ä¸ â"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
