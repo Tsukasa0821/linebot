@@ -36,18 +36,19 @@ def push_message(user_id: str, text: str):
         json={"to": user_id, "messages": messages},
     )
 
-def add_expense(amount: int, category: str, note: str) -> str:
+def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
+    expense_date = date if date else datetime.date.today().isoformat()
     data = {
         "parent": {"database_id": NOTION_EXPENSE_DB_ID},
         "properties": {
             "名稱": {"title": [{"text": {"content": note}}]},
             "金額": {"number": amount},
             "分類": {"select": {"name": category}},
-            "日期": {"date": {"start": datetime.date.today().isoformat()}},
+            "日期": {"date": {"start": expense_date}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
-    return "✅ 已記帳" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
+    return f"✅ 已記帳（{expense_date}）" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
 
 def query_expenses(period: str = "month") -> str:
     today = datetime.date.today()
@@ -193,7 +194,7 @@ def delete_todo(keyword: str) -> str:
     return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的待辦事項"
 
 TOOLS = [
-    {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}}, "required": ["amount", "category", "note"]}}},
+    {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string"}, "date": {"type": "string", "description": "消費日期 YYYY-MM-DD，若用戶指定過去日期請填入，否則省略"}}, "required": ["amount", "category", "note"]}}},
     {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"}}, "required": []}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
@@ -237,8 +238,9 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 def handle_message(user_text: str) -> str:
+    today = datetime.date.today().isoformat()
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT + f" 今天日期：{today}。"},
         {"role": "user", "content": user_text},
     ]
     data = groq_chat(messages, TOOLS)
