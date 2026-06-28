@@ -41,88 +41,88 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
     data = {
         "parent": {"database_id": NOTION_EXPENSE_DB_ID},
         "properties": {
-            "åç¨±": {"title": [{"text": {"content": note}}]},
-            "éé¡": {"number": amount},
-            "åé¡": {"select": {"name": category}},
-            "æ¥æ": {"date": {"start": expense_date}},
+            "Ã¥ÂÂÃ§Â¨Â±": {"title": [{"text": {"content": note}}]},
+            "Ã©ÂÂÃ©Â¡Â": {"number": amount},
+            "Ã¥ÂÂÃ©Â¡Â": {"select": {"name": category}},
+            "Ã¦ÂÂ¥Ã¦ÂÂ": {"date": {"start": expense_date}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
-    return f"â å·²è¨å¸³ï¼{expense_date}ï¼" if res.status_code == 200 else f"â è¨å¸³å¤±æï¼{res.text}"
+    return f"Ã¢ÂÂ Ã¥Â·Â²Ã¨Â¨ÂÃ¥Â¸Â³Ã¯Â¼Â{expense_date}Ã¯Â¼Â" if res.status_code == 200 else f"Ã¢ÂÂ Ã¨Â¨ÂÃ¥Â¸Â³Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
 
 def query_expenses(period: str = "month", date: str = None) -> str:
     today = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).date()
     if date:
         date = date.replace("/", "-").replace(".", "-")
-        filter_obj = {"property": "æ¥æ", "date": {"equals": date}}
+        filter_obj = {"property": "Ã¦ÂÂ¥Ã¦ÂÂ", "date": {"equals": date}}
         label = date
     elif period == "today":
         start = today.isoformat()
-        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
-        label = "ä»å¤©"
+        filter_obj = {"property": "Ã¦ÂÂ¥Ã¦ÂÂ", "date": {"on_or_after": start}}
+        label = "Ã¤Â»ÂÃ¥Â¤Â©"
     elif period == "week":
         start = (today - datetime.timedelta(days=today.weekday())).isoformat()
-        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
-        label = "æ¬é±"
+        filter_obj = {"property": "Ã¦ÂÂ¥Ã¦ÂÂ", "date": {"on_or_after": start}}
+        label = "Ã¦ÂÂ¬Ã©ÂÂ±"
     else:
         start = today.replace(day=1).isoformat()
-        filter_obj = {"property": "æ¥æ", "date": {"on_or_after": start}}
-        label = "æ¬æ"
+        filter_obj = {"property": "Ã¦ÂÂ¥Ã¦ÂÂ", "date": {"on_or_after": start}}
+        label = "Ã¦ÂÂ¬Ã¦ÂÂ"
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_EXPENSE_DB_ID}/query",
         headers=NOTION_HEADERS,
-        json={"filter": filter_obj, "sorts": [{"property": "æ¥æ", "direction": "ascending"}]},
+        json={"filter": filter_obj, "sorts": [{"property": "Ã¦ÂÂ¥Ã¦ÂÂ", "direction": "ascending"}]},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "ð­ éæ®µæéæ²æè¨å¸³ç´é"
+        return "Ã°ÂÂÂ­ Ã©ÂÂÃ¦Â®ÂµÃ¦ÂÂÃ©ÂÂÃ¦Â²ÂÃ¦ÂÂÃ¨Â¨ÂÃ¥Â¸Â³Ã§Â´ÂÃ©ÂÂ"
     lines = []
     total = 0
     for r in results:
         props = r["properties"]
-        name = props["åç¨±"]["title"][0]["plain_text"] if props["åç¨±"]["title"] else "ï¼ç¡ï¼"
-        amount = props["éé¡"]["number"] or 0
-        category = props["åé¡"]["select"]["name"] if props["åé¡"]["select"] else "å¶ä»"
-        date_val = props["æ¥æ"]["date"]["start"] if props["æ¥æ"]["date"] else ""
+        name = props["Ã¥ÂÂÃ§Â¨Â±"]["title"][0]["plain_text"] if props["Ã¥ÂÂÃ§Â¨Â±"]["title"] else "Ã¯Â¼ÂÃ§ÂÂ¡Ã¯Â¼Â"
+        amount = props["Ã©ÂÂÃ©Â¡Â"]["number"] or 0
+        category = props["Ã¥ÂÂÃ©Â¡Â"]["select"]["name"] if props["Ã¥ÂÂÃ©Â¡Â"]["select"] else "Ã¥ÂÂ¶Ã¤Â»Â"
+        date_val = props["Ã¦ÂÂ¥Ã¦ÂÂ"]["date"]["start"] if props["Ã¦ÂÂ¥Ã¦ÂÂ"]["date"] else ""
         total += amount
         lines.append(f"  {date_val}  [{category}] {name}  ${amount}")
-    return f"ð {label}è±è²»\n" + "\n".join(lines) + f"\n\nð° åè¨ï¼${total}"
+    return f"Ã°ÂÂÂ {label}Ã¨ÂÂ±Ã¨Â²Â»\n" + "\n".join(lines) + f"\n\nÃ°ÂÂÂ° Ã¥ÂÂÃ¨Â¨ÂÃ¯Â¼Â${total}"
 
 def add_todo(title: str, note: str = "") -> str:
     data = {
         "parent": {"database_id": NOTION_TODO_DB_ID},
         "properties": {
-            "åç¨±": {"title": [{"text": {"content": title}}]},
-            "åè¨»": {"rich_text": [{"text": {"content": note}}]},
-            "çæ": {"select": {"name": "å¾è¾¦"}},
-            "å»ºç«æ¥æ": {"date": {"start": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")}},
+            "Ã¥ÂÂÃ§Â¨Â±": {"title": [{"text": {"content": title}}]},
+            "Ã¥ÂÂÃ¨Â¨Â»": {"rich_text": [{"text": {"content": note}}]},
+            "Ã§ÂÂÃ¦ÂÂ": {"select": {"name": "Ã¥Â¾ÂÃ¨Â¾Â¦"}},
+            "Ã¥Â»ÂºÃ§Â«ÂÃ¦ÂÂ¥Ã¦ÂÂ": {"date": {"start": (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d")}},
         },
     }
     res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
-    return "â å¾è¾¦å·²æ°å¢" if res.status_code == 200 else f"â æ°å¢å¤±æï¼{res.text}"
+    return "Ã¢ÂÂ Ã¥Â¾ÂÃ¨Â¾Â¦Ã¥Â·Â²Ã¦ÂÂ°Ã¥Â¢Â" if res.status_code == 200 else f"Ã¢ÂÂ Ã¦ÂÂ°Ã¥Â¢ÂÃ¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
 
 def query_todos() -> str:
     res = requests.post(
         f"https://api.notion.com/v1/databases/{NOTION_TODO_DB_ID}/query",
         headers=NOTION_HEADERS,
-        json={"filter": {"property": "çæ", "select": {"equals": "å¾è¾¦"}}, "sorts": [{"property": "å»ºç«æ¥æ", "direction": "ascending"}]},
+        json={"filter": {"property": "Ã§ÂÂÃ¦ÂÂ", "select": {"equals": "Ã¥Â¾ÂÃ¨Â¾Â¦"}}, "sorts": [{"property": "Ã¥Â»ÂºÃ§Â«ÂÃ¦ÂÂ¥Ã¦ÂÂ", "direction": "ascending"}]},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "ð æ²æå¾è¾¦äºé ï¼"
+        return "Ã°ÂÂÂ Ã¦Â²ÂÃ¦ÂÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â ÂÃ¯Â¼Â"
     lines = []
     for i, r in enumerate(results, 1):
         props = r["properties"]
-        name = props["åç¨±"]["title"][0]["plain_text"] if props["åç¨±"]["title"] else "ï¼ç¡ï¼"
+        name = props["Ã¥ÂÂÃ§Â¨Â±"]["title"][0]["plain_text"] if props["Ã¥ÂÂÃ§Â¨Â±"]["title"] else "Ã¯Â¼ÂÃ§ÂÂ¡Ã¯Â¼Â"
         note = ""
-        if props.get("åè¨»") and props["åè¨»"]["rich_text"]:
-            note = f"\n   â {props['åè¨»']['rich_text'][0]['plain_text']}"
+        if props.get("Ã¥ÂÂÃ¨Â¨Â»") and props["Ã¥ÂÂÃ¨Â¨Â»"]["rich_text"]:
+            note = f"\n   Ã¢ÂÂ {props['Ã¥ÂÂÃ¨Â¨Â»']['rich_text'][0]['plain_text']}"
         lines.append(f"{i}. {name}{note}")
-    return "ð å¾è¾¦æ¸å®\n" + "\n".join(lines)
+    return "Ã°ÂÂÂ Ã¥Â¾ÂÃ¨Â¾Â¦Ã¦Â¸ÂÃ¥ÂÂ®\n" + "\n".join(lines)
 
 def clear_expenses() -> str:
     res = requests.post(
@@ -131,17 +131,17 @@ def clear_expenses() -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "â è¨å¸³æ¬ä¾å°±æ¯ç©ºç"
+        return "Ã¢ÂÂ Ã¨Â¨ÂÃ¥Â¸Â³Ã¦ÂÂ¬Ã¤Â¾ÂÃ¥Â°Â±Ã¦ÂÂ¯Ã§Â©ÂºÃ§ÂÂ"
     for r in results:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"â å·²æ¸ç©º {len(results)} ç­è¨å¸³è¨é"
+    return f"Ã¢ÂÂ Ã¥Â·Â²Ã¦Â¸ÂÃ§Â©Âº {len(results)} Ã§Â­ÂÃ¨Â¨ÂÃ¥Â¸Â³Ã¨Â¨ÂÃ©ÂÂ"
 
 def clear_todos() -> str:
     res = requests.post(
@@ -150,17 +150,17 @@ def clear_todos() -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
     if not results:
-        return "â å¾è¾¦æ¬ä¾å°±æ¯ç©ºç"
+        return "Ã¢ÂÂ Ã¥Â¾ÂÃ¨Â¾Â¦Ã¦ÂÂ¬Ã¤Â¾ÂÃ¥Â°Â±Ã¦ÂÂ¯Ã§Â©ÂºÃ§ÂÂ"
     for r in results:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"â å·²æ¸ç©º {len(results)} ç­å¾è¾¦äºé "
+    return f"Ã¢ÂÂ Ã¥Â·Â²Ã¦Â¸ÂÃ§Â©Âº {len(results)} Ã§Â­ÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â Â"
 
 def delete_expense(keyword: str) -> str:
     res = requests.post(
@@ -169,18 +169,18 @@ def delete_expense(keyword: str) -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
-    matched = [r for r in results if keyword in (r["properties"]["åç¨±"]["title"][0]["plain_text"] if r["properties"]["åç¨±"]["title"] else "")]
+    matched = [r for r in results if keyword in (r["properties"]["Ã¥ÂÂÃ§Â¨Â±"]["title"][0]["plain_text"] if r["properties"]["Ã¥ÂÂÃ§Â¨Â±"]["title"] else "")]
     if not matched:
-        return f"â æ¾ä¸å°å«ã{keyword}ãçè¨å¸³è¨é"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¾Ã¤Â¸ÂÃ¥ÂÂ°Ã¥ÂÂ«Ã£ÂÂ{keyword}Ã£ÂÂÃ§ÂÂÃ¨Â¨ÂÃ¥Â¸Â³Ã¨Â¨ÂÃ©ÂÂ"
     for r in matched:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"â å·²åªé¤ {len(matched)} ç­å«ã{keyword}ãçè¨å¸³è¨é"
+    return f"Ã¢ÂÂ Ã¥Â·Â²Ã¥ÂÂªÃ©ÂÂ¤ {len(matched)} Ã§Â­ÂÃ¥ÂÂ«Ã£ÂÂ{keyword}Ã£ÂÂÃ§ÂÂÃ¨Â¨ÂÃ¥Â¸Â³Ã¨Â¨ÂÃ©ÂÂ"
 
 def delete_todo(keyword: str) -> str:
     res = requests.post(
@@ -189,31 +189,31 @@ def delete_todo(keyword: str) -> str:
         json={},
     )
     if res.status_code != 200:
-        return f"â æ¥è©¢å¤±æï¼{res.text}"
+        return f"Ã¢ÂÂ Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¤Â±Ã¦ÂÂÃ¯Â¼Â{res.text}"
     results = res.json().get("results", [])
-    matched = [r for r in results if keyword in (r["properties"]["åç¨±"]["title"][0]["plain_text"] if r["properties"]["åç¨±"]["title"] else "")]
+    matched = [r for r in results if keyword in (r["properties"]["Ã¥ÂÂÃ§Â¨Â±"]["title"][0]["plain_text"] if r["properties"]["Ã¥ÂÂÃ§Â¨Â±"]["title"] else "")]
     if not matched:
-        return f"â æ¾ä¸å°å«ã{keyword}ãçå¾è¾¦äºé "
+        return f"Ã¢ÂÂ Ã¦ÂÂ¾Ã¤Â¸ÂÃ¥ÂÂ°Ã¥ÂÂ«Ã£ÂÂ{keyword}Ã£ÂÂÃ§ÂÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â Â"
     for r in matched:
         requests.patch(
             f"https://api.notion.com/v1/pages/{r['id']}",
             headers=NOTION_HEADERS,
             json={"archived": True},
         )
-    return f"â å·²åªé¤ {len(matched)} ç­å«ã{keyword}ãçå¾è¾¦äºé "
+    return f"Ã¢ÂÂ Ã¥Â·Â²Ã¥ÂÂªÃ©ÂÂ¤ {len(matched)} Ã§Â­ÂÃ¥ÂÂ«Ã£ÂÂ{keyword}Ã£ÂÂÃ§ÂÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â Â"
 
 TOOLS = [
-    {"type": "function", "function": {"name": "add_expense", "description": "è¨éä¸ç­æ¶è²»", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string", "description": "消費品項名稱，不可包含日期時間詞（昨天、前天、上週五等），只寫消費品項本身"}, "date": {"type": "string", "description": "æ¶è²»æ¥æï¼æ ¼å¼YYYY-MM-DDãè¥ç¨æ¶æå°éå»æéï¼å¦ä¸é±äºãæ¨å¤©ãä¸å¤©åãä¸åæ15èï¼ï¼å¿é æ ¹æç³»çµ±æç¤ºä¸­çä»å¤©æ¥æè¨ç®åºæ­£ç¢ºæ¥æå¾å¡«å¥ãè¥æªæå°ç¹å®æ¥æåä¸å¡«ã"}}, "required": ["amount", "category", "note"]}}},
-    {"type": "function", "function": {"name": "query_expenses", "description": "æ¥è©¢è±è²»ç´é", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=ä»å¤©, week=æ¬é±, month=æ¬æ"}, "date": {"type": "string", "description": "æ¥è©¢æå®æ¥æè±è²»ï¼ç¡è«ç¨æ¶ç¨ä½ç¨®è¡¨éï¼ä¸é±äºãæ¨å¤©ãåå¤©ãå­æäºåä¸æ¥ã2026/06/27ï¼ï¼é½å¿é æ ¹æä»å¤©æ¥æè¨ç®ä¸¦è½æçº YYYY-MM-DD æ ¼å¼å¡«å¥æ­¤æ¬ä½"}}, "required": []}}},
-    {"type": "function", "function": {"name": "add_todo", "description": "æ°å¢å¾è¾¦äºé ", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
-    {"type": "function", "function": {"name": "query_todos", "description": "æ¥è©¢å¾è¾¦æ¸å®", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_expenses", "description": "æ¸ç©ºåªé¤ææè¨å¸³è±è²»ç´é", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_todos", "description": "æ¸ç©ºåªé¤ææå¾è¾¦äºé ", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "delete_expense", "description": "åªé¤æå®çæç­è¨å¸³è±è²»ï¼ä¾ééµå­æå°ï¼", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
-    {"type": "function", "function": {"name": "delete_todo", "description": "åªé¤æå®çæç­å¾è¾¦äºé ï¼ä¾ééµå­æå°ï¼", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "add_expense", "description": "Ã¨Â¨ÂÃ©ÂÂÃ¤Â¸ÂÃ§Â­ÂÃ¦Â¶ÂÃ¨Â²Â»", "parameters": {"type": "object", "properties": {"amount": {"type": "integer"}, "category": {"type": "string"}, "note": {"type": "string", "description": "æ¶è²»åé åç¨±ï¼ä¸å¯åå«æ¥ææéè©ï¼æ¨å¤©ãåå¤©ãä¸é±äºç­ï¼ï¼åªå¯«æ¶è²»åé æ¬èº«"}, "date": {"type": "string", "description": "Ã¦Â¶ÂÃ¨Â²Â»Ã¦ÂÂ¥Ã¦ÂÂÃ¯Â¼ÂÃ¦Â Â¼Ã¥Â¼ÂYYYY-MM-DDÃ£ÂÂÃ¨ÂÂ¥Ã§ÂÂ¨Ã¦ÂÂ¶Ã¦ÂÂÃ¥ÂÂ°Ã©ÂÂÃ¥ÂÂ»Ã¦ÂÂÃ©ÂÂÃ¯Â¼ÂÃ¥Â¦ÂÃ¤Â¸ÂÃ©ÂÂ±Ã¤ÂºÂÃ£ÂÂÃ¦ÂÂ¨Ã¥Â¤Â©Ã£ÂÂÃ¤Â¸ÂÃ¥Â¤Â©Ã¥ÂÂÃ£ÂÂÃ¤Â¸ÂÃ¥ÂÂÃ¦ÂÂ15Ã¨ÂÂÃ¯Â¼ÂÃ¯Â¼ÂÃ¥Â¿ÂÃ©Â ÂÃ¦Â Â¹Ã¦ÂÂÃ§Â³Â»Ã§ÂµÂ±Ã¦ÂÂÃ§Â¤ÂºÃ¤Â¸Â­Ã§ÂÂÃ¤Â»ÂÃ¥Â¤Â©Ã¦ÂÂ¥Ã¦ÂÂÃ¨Â¨ÂÃ§Â®ÂÃ¥ÂÂºÃ¦Â­Â£Ã§Â¢ÂºÃ¦ÂÂ¥Ã¦ÂÂÃ¥Â¾ÂÃ¥Â¡Â«Ã¥ÂÂ¥Ã£ÂÂÃ¨ÂÂ¥Ã¦ÂÂªÃ¦ÂÂÃ¥ÂÂ°Ã§ÂÂ¹Ã¥Â®ÂÃ¦ÂÂ¥Ã¦ÂÂÃ¥ÂÂÃ¤Â¸ÂÃ¥Â¡Â«Ã£ÂÂ"}}, "required": ["amount", "category", "note"]}}},
+    {"type": "function", "function": {"name": "query_expenses", "description": "Ã¦ÂÂ¥Ã¨Â©Â¢Ã¨ÂÂ±Ã¨Â²Â»Ã§Â´ÂÃ©ÂÂ", "parameters": {"type": "object", "properties": {"period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=Ã¤Â»ÂÃ¥Â¤Â©, week=Ã¦ÂÂ¬Ã©ÂÂ±, month=Ã¦ÂÂ¬Ã¦ÂÂ"}, "date": {"type": "string", "description": "Ã¦ÂÂ¥Ã¨Â©Â¢Ã¦ÂÂÃ¥Â®ÂÃ¦ÂÂ¥Ã¦ÂÂÃ¨ÂÂ±Ã¨Â²Â»Ã¯Â¼ÂÃ§ÂÂ¡Ã¨Â«ÂÃ§ÂÂ¨Ã¦ÂÂ¶Ã§ÂÂ¨Ã¤Â½ÂÃ§Â¨Â®Ã¨Â¡Â¨Ã©ÂÂÃ¯Â¼ÂÃ¤Â¸ÂÃ©ÂÂ±Ã¤ÂºÂÃ£ÂÂÃ¦ÂÂ¨Ã¥Â¤Â©Ã£ÂÂÃ¥ÂÂÃ¥Â¤Â©Ã£ÂÂÃ¥ÂÂ­Ã¦ÂÂÃ¤ÂºÂÃ¥ÂÂÃ¤Â¸ÂÃ¦ÂÂ¥Ã£ÂÂ2026/06/27Ã¯Â¼ÂÃ¯Â¼ÂÃ©ÂÂ½Ã¥Â¿ÂÃ©Â ÂÃ¦Â Â¹Ã¦ÂÂÃ¤Â»ÂÃ¥Â¤Â©Ã¦ÂÂ¥Ã¦ÂÂÃ¨Â¨ÂÃ§Â®ÂÃ¤Â¸Â¦Ã¨Â½ÂÃ¦ÂÂÃ§ÂÂº YYYY-MM-DD Ã¦Â Â¼Ã¥Â¼ÂÃ¥Â¡Â«Ã¥ÂÂ¥Ã¦Â­Â¤Ã¦Â¬ÂÃ¤Â½Â"}}, "required": []}}},
+    {"type": "function", "function": {"name": "add_todo", "description": "Ã¦ÂÂ°Ã¥Â¢ÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â Â", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
+    {"type": "function", "function": {"name": "query_todos", "description": "Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¾ÂÃ¨Â¾Â¦Ã¦Â¸ÂÃ¥ÂÂ®", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_expenses", "description": "Ã¦Â¸ÂÃ§Â©ÂºÃ¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¦ÂÂÃ¨Â¨ÂÃ¥Â¸Â³Ã¨ÂÂ±Ã¨Â²Â»Ã§Â´ÂÃ©ÂÂ", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_todos", "description": "Ã¦Â¸ÂÃ§Â©ÂºÃ¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¦ÂÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â Â", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "delete_expense", "description": "Ã¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¥Â®ÂÃ§ÂÂÃ¦ÂÂÃ§Â­ÂÃ¨Â¨ÂÃ¥Â¸Â³Ã¨ÂÂ±Ã¨Â²Â»Ã¯Â¼ÂÃ¤Â¾ÂÃ©ÂÂÃ©ÂÂµÃ¥Â­ÂÃ¦ÂÂÃ¥Â°ÂÃ¯Â¼Â", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "delete_todo", "description": "Ã¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¥Â®ÂÃ§ÂÂÃ¦ÂÂÃ§Â­ÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¤ÂºÂÃ©Â ÂÃ¯Â¼ÂÃ¤Â¾ÂÃ©ÂÂÃ©ÂÂµÃ¥Â­ÂÃ¦ÂÂÃ¥Â°ÂÃ¯Â¼Â", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
 ]
 
-SYSTEM_PROMPT = "ä½ æ¯ LINE è¨å¸³å©ç Fridayãå¼·å¶è¦åï¼1.è¨æ¯å«å·é«éé¡æ¸å­æå¼å« add_expenseï¼ç¡æ¸å­ç¦æ­¢å¼å«ï¼è¥æå°éå»æéï¼ä¸é±äºãæ¨å¤©ç­ï¼å¿é åè¨ç®åºæ­£ç¢ºæ¥æï¼YYYY-MM-DDï¼åå¡«å¥dateåæ¸ï¼ä¾å¦ä»å¤©é±ä¸åä¸é±äº=ä»å¤©-3å¤©ï¼2.è¨æ¯å«å¾è¾¦æéä¸ç¡éé¡æå¼å« add_todoï¼3.æ¥è©¢è±è²»è¨å¸³æ¯åºè¨éç­è©å¼å« query_expensesï¼ä»å¤©ç¨ period=todayï¼æ¬é±ç¨ weekï¼æ¬æç¨ monthï¼ä»»ä½æå®æ¥æï¼ç¡è«æ¯æ¸å­ãä¸­æãæ¨å¤©åå¤©ä¸é±äºç­ï¼é½åè¨ç®åºYYYY-MM-DDåç¨ date åæ¸ï¼4.æ¥è©¢å¾è¾¦å¼å« query_todosï¼5.æ¸ç©ºåªé¤å¨é¨è±è²»å¼å« clear_expensesï¼6.æ¸ç©ºåªé¤å¨é¨å¾è¾¦å¼å« clear_todosï¼7.åªé¤æå®è±è²»å¼å« delete_expenseï¼8.åªé¤æå®å¾è¾¦å¼å« delete_todoãæ°¸é å¼å«å·¥å·ï¼ä¸å¾èªè¡åç­ãç¹é«ä¸­æï¼åè¦ç°¡ç­ã"
+SYSTEM_PROMPT = "Ã¤Â½Â Ã¦ÂÂ¯ LINE Ã¨Â¨ÂÃ¥Â¸Â³Ã¥ÂÂ©Ã§ÂÂ FridayÃ£ÂÂÃ¥Â¼Â·Ã¥ÂÂ¶Ã¨Â¦ÂÃ¥ÂÂÃ¯Â¼Â1.Ã¨Â¨ÂÃ¦ÂÂ¯Ã¥ÂÂ«Ã¥ÂÂ·Ã©Â«ÂÃ©ÂÂÃ©Â¡ÂÃ¦ÂÂ¸Ã¥Â­ÂÃ¦ÂÂÃ¥ÂÂ¼Ã¥ÂÂ« add_expenseÃ¯Â¼ÂÃ§ÂÂ¡Ã¦ÂÂ¸Ã¥Â­ÂÃ§Â¦ÂÃ¦Â­Â¢Ã¥ÂÂ¼Ã¥ÂÂ«Ã¯Â¼ÂÃ¨ÂÂ¥Ã¦ÂÂÃ¥ÂÂ°Ã©ÂÂÃ¥ÂÂ»Ã¦ÂÂÃ©ÂÂÃ¯Â¼ÂÃ¤Â¸ÂÃ©ÂÂ±Ã¤ÂºÂÃ£ÂÂÃ¦ÂÂ¨Ã¥Â¤Â©Ã§Â­ÂÃ¯Â¼ÂÃ¥Â¿ÂÃ©Â ÂÃ¥ÂÂÃ¨Â¨ÂÃ§Â®ÂÃ¥ÂÂºÃ¦Â­Â£Ã§Â¢ÂºÃ¦ÂÂ¥Ã¦ÂÂÃ¯Â¼ÂYYYY-MM-DDÃ¯Â¼ÂÃ¥ÂÂÃ¥Â¡Â«Ã¥ÂÂ¥dateÃ¥ÂÂÃ¦ÂÂ¸Ã¯Â¼ÂÃ¤Â¾ÂÃ¥Â¦ÂÃ¤Â»ÂÃ¥Â¤Â©Ã©ÂÂ±Ã¤Â¸ÂÃ¥ÂÂÃ¤Â¸ÂÃ©ÂÂ±Ã¤ÂºÂ=Ã¤Â»ÂÃ¥Â¤Â©-3Ã¥Â¤Â©Ã¯Â¼Â2.Ã¨Â¨ÂÃ¦ÂÂ¯Ã¥ÂÂ«Ã¥Â¾ÂÃ¨Â¾Â¦Ã¦ÂÂÃ©ÂÂÃ¤Â¸ÂÃ§ÂÂ¡Ã©ÂÂÃ©Â¡ÂÃ¦ÂÂÃ¥ÂÂ¼Ã¥ÂÂ« add_todoÃ¯Â¼Â3.Ã¦ÂÂ¥Ã¨Â©Â¢Ã¨ÂÂ±Ã¨Â²Â»Ã¨Â¨ÂÃ¥Â¸Â³Ã¦ÂÂ¯Ã¥ÂÂºÃ¨Â¨ÂÃ©ÂÂÃ§Â­ÂÃ¨Â©ÂÃ¥ÂÂ¼Ã¥ÂÂ« query_expensesÃ¯Â¼ÂÃ¤Â»ÂÃ¥Â¤Â©Ã§ÂÂ¨ period=todayÃ¯Â¼ÂÃ¦ÂÂ¬Ã©ÂÂ±Ã§ÂÂ¨ weekÃ¯Â¼ÂÃ¦ÂÂ¬Ã¦ÂÂÃ§ÂÂ¨ monthÃ¯Â¼ÂÃ¤Â»Â»Ã¤Â½ÂÃ¦ÂÂÃ¥Â®ÂÃ¦ÂÂ¥Ã¦ÂÂÃ¯Â¼ÂÃ§ÂÂ¡Ã¨Â«ÂÃ¦ÂÂ¯Ã¦ÂÂ¸Ã¥Â­ÂÃ£ÂÂÃ¤Â¸Â­Ã¦ÂÂÃ£ÂÂÃ¦ÂÂ¨Ã¥Â¤Â©Ã¥ÂÂÃ¥Â¤Â©Ã¤Â¸ÂÃ©ÂÂ±Ã¤ÂºÂÃ§Â­ÂÃ¯Â¼ÂÃ©ÂÂ½Ã¥ÂÂÃ¨Â¨ÂÃ§Â®ÂÃ¥ÂÂºYYYY-MM-DDÃ¥ÂÂÃ§ÂÂ¨ date Ã¥ÂÂÃ¦ÂÂ¸Ã¯Â¼Â4.Ã¦ÂÂ¥Ã¨Â©Â¢Ã¥Â¾ÂÃ¨Â¾Â¦Ã¥ÂÂ¼Ã¥ÂÂ« query_todosÃ¯Â¼Â5.Ã¦Â¸ÂÃ§Â©ÂºÃ¥ÂÂªÃ©ÂÂ¤Ã¥ÂÂ¨Ã©ÂÂ¨Ã¨ÂÂ±Ã¨Â²Â»Ã¥ÂÂ¼Ã¥ÂÂ« clear_expensesÃ¯Â¼Â6.Ã¦Â¸ÂÃ§Â©ÂºÃ¥ÂÂªÃ©ÂÂ¤Ã¥ÂÂ¨Ã©ÂÂ¨Ã¥Â¾ÂÃ¨Â¾Â¦Ã¥ÂÂ¼Ã¥ÂÂ« clear_todosÃ¯Â¼Â7.Ã¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¥Â®ÂÃ¨ÂÂ±Ã¨Â²Â»Ã¥ÂÂ¼Ã¥ÂÂ« delete_expenseÃ¯Â¼Â8.Ã¥ÂÂªÃ©ÂÂ¤Ã¦ÂÂÃ¥Â®ÂÃ¥Â¾ÂÃ¨Â¾Â¦Ã¥ÂÂ¼Ã¥ÂÂ« delete_todoÃ£ÂÂÃ¦Â°Â¸Ã©ÂÂ Ã¥ÂÂ¼Ã¥ÂÂ«Ã¥Â·Â¥Ã¥ÂÂ·Ã¯Â¼ÂÃ¤Â¸ÂÃ¥Â¾ÂÃ¨ÂÂªÃ¨Â¡ÂÃ¥ÂÂÃ§Â­ÂÃ£ÂÂÃ§Â¹ÂÃ©Â«ÂÃ¤Â¸Â­Ã¦ÂÂÃ¯Â¼ÂÃ¥ÂÂÃ¨Â¦ÂÃ§Â°Â¡Ã§ÂÂ­Ã£ÂÂ"
 
 def groq_chat(messages, tools=None):
     payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
@@ -244,14 +244,14 @@ def run_tool(name: str, args: dict) -> str:
         return delete_expense(**args)
     elif name == "delete_todo":
         return delete_todo(**args)
-    return "æªç¥å·¥å·"
+    return "Ã¦ÂÂªÃ§ÂÂ¥Ã¥Â·Â¥Ã¥ÂÂ·"
 
 def handle_message(user_text: str) -> str:
     _now_tw = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
     today = _now_tw.strftime("%Y-%m-%d")
-    weekday = ["é±ä¸","é±äº","é±ä¸","é±å","é±äº","é±å­","é±æ¥"][_now_tw.weekday()]
+    weekday = ["Ã©ÂÂ±Ã¤Â¸Â","Ã©ÂÂ±Ã¤ÂºÂ","Ã©ÂÂ±Ã¤Â¸Â","Ã©ÂÂ±Ã¥ÂÂ","Ã©ÂÂ±Ã¤ÂºÂ","Ã©ÂÂ±Ã¥ÂÂ­","Ã©ÂÂ±Ã¦ÂÂ¥"][_now_tw.weekday()]
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT + f" ä»å¤©ï¼{today}ï¼{weekday}ï¼ã"},
+        {"role": "system", "content": SYSTEM_PROMPT + f" Ã¤Â»ÂÃ¥Â¤Â©Ã¯Â¼Â{today}Ã¯Â¼Â{weekday}Ã¯Â¼ÂÃ£ÂÂ"},
         {"role": "user", "content": user_text},
     ]
     data = groq_chat(messages, TOOLS)
@@ -260,18 +260,17 @@ def handle_message(user_text: str) -> str:
         if err.get("code") == "tool_use_failed":
             failed = err.get("failed_generation", "")
             try:
-                start = failed.index("<function=") + len("<function=")
-                rest = failed[start:]
-                name = rest[:rest.index("=")]
-                json_str = rest[rest.index("{"):rest.rindex("}")+1]
-                return run_tool(name, json.loads(json_str) or {})
+                import re as _re
+                m = _re.search(r'<function=(\w+)[\[=](\{.*\})', failed, _re.DOTALL)
+                if m:
+                    return run_tool(m.group(1), json.loads(m.group(2)) or {})
             except Exception:
                 pass
-        return f"Groqé¯èª¤ï¼{data}"
+        return f"GroqÃ©ÂÂ¯Ã¨ÂªÂ¤Ã¯Â¼Â{data}"
     msg = data["choices"][0]["message"]
     tool_calls = msg.get("tool_calls")
     if not tool_calls:
-        return msg.get("content") or "ï¼ç¡æ³çè§£æä»¤ï¼"
+        return msg.get("content") or "Ã¯Â¼ÂÃ§ÂÂ¡Ã¦Â³ÂÃ§ÂÂÃ¨Â§Â£Ã¦ÂÂÃ¤Â»Â¤Ã¯Â¼Â"
     results = []
     for tc in tool_calls:
         args = json.loads(tc["function"]["arguments"]) or {}
@@ -297,14 +296,14 @@ def webhook():
             try:
                 reply = handle_message(user_text)
             except Exception as e:
-                reply = f"â ï¸ åºé¯äºï¼{str(e)}"
+                reply = f"Ã¢ÂÂ Ã¯Â¸Â Ã¥ÂÂºÃ©ÂÂ¯Ã¤ÂºÂÃ¯Â¼Â{str(e)}"
             push_message(user_id, reply)
     threading.Thread(target=process_events, daemon=True).start()
     return "OK"
 
 @app.route("/", methods=["GET"])
 def health():
-    return "å°é£å¨ç·ä¸ â"
+    return "Ã¥Â°ÂÃ©Â£ÂÃ¥ÂÂ¨Ã§Â·ÂÃ¤Â¸Â Ã¢ÂÂ"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
