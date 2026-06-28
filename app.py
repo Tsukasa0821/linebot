@@ -245,6 +245,17 @@ def handle_message(user_text: str) -> str:
     ]
     data = groq_chat(messages, TOOLS)
     if "choices" not in data:
+        err = data.get("error", {})
+        if err.get("code") == "tool_use_failed":
+            failed = err.get("failed_generation", "")
+            try:
+                start = failed.index("<function=") + len("<function=")
+                rest = failed[start:]
+                name = rest[:rest.index("=")]
+                json_str = rest[rest.index("{"):rest.rindex("}")+1]
+                return run_tool(name, json.loads(json_str))
+            except Exception:
+                pass
         return f"Groq錯誤：{data}"
     msg = data["choices"][0]["message"]
     tool_calls = msg.get("tool_calls")
