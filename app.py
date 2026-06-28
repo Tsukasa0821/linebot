@@ -241,20 +241,19 @@ def handle_message(user_text: str) -> str:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_text},
     ]
-    for _ in range(3):
-        data = groq_chat(messages, TOOLS)
-        if "choices" not in data:
-            return f"Groq錯誤：{data}"
-        msg = data["choices"][0]["message"]
-        tool_calls = msg.get("tool_calls")
-        if not tool_calls:
-            return msg.get("content", "")
-        messages.append(msg)
-        for tc in tool_calls:
-            args = json.loads(tc["function"]["arguments"])
-            result = run_tool(tc["function"]["name"], args)
-            messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
-    return msg.get("content", "處理完成")
+    data = groq_chat(messages, TOOLS)
+    if "choices" not in data:
+        return f"Groq錯誤：{data}"
+    msg = data["choices"][0]["message"]
+    tool_calls = msg.get("tool_calls")
+    if not tool_calls:
+        return msg.get("content") or "（無法理解指令）"
+    results = []
+    for tc in tool_calls:
+        args = json.loads(tc["function"]["arguments"])
+        result = run_tool(tc["function"]["name"], args)
+        results.append(result)
+    return "\n".join(results)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
