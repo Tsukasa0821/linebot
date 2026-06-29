@@ -82,13 +82,31 @@ def add_expense(amount: int, category: str, note: str, date: str = None) -> str:
     return f"✅ 已記帳（{expense_date}）" if res.status_code == 200 else f"❌ 記帳失敗：{res.text}"
 
 
-def query_expenses(period: str = "month", date: str = None) -> str:
+def query_expenses(period: str = "month", date: str = None, year_month: str = None) -> str:
     today = _tw_now().date()
     if date:
         date = date.replace("/", "-").replace(".", "-")
         filter_obj = {"property": "日期", "date": {"equals": date}}
         label = date
         payload = {"filter": filter_obj}
+    elif year_month:
+        year_month = year_month.replace("/", "-").replace(".", "-")
+        yr, mo = map(int, year_month.split("-"))
+        start = f"{yr:04d}-{mo:02d}-01"
+        if mo == 12:
+            end_dt = datetime.date(yr + 1, 1, 1) - datetime.timedelta(days=1)
+        else:
+            end_dt = datetime.date(yr, mo + 1, 1) - datetime.timedelta(days=1)
+        filter_obj = {"and": [{"property": "日期", "date": {"on_or_after": start}}, {"property": "日期", "date": {"on_or_before": end_dt.isoformat()}}]}
+        label = f"{yr}年{mo}月"
+        payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+    elif period == "last_month":
+        first_of_this_month = today.replace(day=1)
+        lm_end = first_of_this_month - datetime.timedelta(days=1)
+        lm_start = lm_end.replace(day=1)
+        filter_obj = {"and": [{"property": "日期", "date": {"on_or_after": lm_start.isoformat()}}, {"property": "日期", "date": {"on_or_before": lm_end.isoformat()}}]}
+        label = f"{lm_start.year}年{lm_start.month}月"
+        payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
     elif period == "today":
         start = today.isoformat()
         filter_obj = {"property": "日期", "date": {"on_or_after": start}}
@@ -207,8 +225,9 @@ TOOLS = [
         "date": {"type": "string", "description": "消費日期 YYYY-MM-DD。若用戶提到任何時間表達（上週五、昨天、前天、六月二十七日、2026/06/27），必須根據系統提示中的今天日期計算後填入。若未提到日期則省略。"}
     }, "required": ["amount", "category", "note"]}}},
     {"type": "function", "function": {"name": "query_expenses", "description": "查詢花費紀錄", "parameters": {"type": "object", "properties": {
-        "period": {"type": "string", "enum": ["today", "week", "month"], "description": "today=今天, week=本週, month=本月"},
-        "date": {"type": "string", "description": "查詢指定日期花費。無論用戶用何種表達（上週五、昨天、前天、六月二十七日、2026/06/27），都必須根據今天日期計算並轉換為 YYYY-MM-DD 格式填入此欄位。有此參數時忽略 period。"}
+        "period": {"type": "string", "enum": ["today", "week", "month", "last_month"], "description": "today=今天, week=本週, month=本月, last_month=上個月"},
+        "date": {"type": "string", "description": "查詢指定日期花費（YYYY-MM-DD）。任何時間表達都先算出日期再填入。有此參數時忽略其他。"},
+        "year_month": {"type": "string", "description": "查詢指定月份全部花費（YYYY-MM）。如「6月」→ 2026-06，「5月明細」→ 2026-05，「2026年3月」→ 2026-03。有此參數時忽略 period。"}
     }, "required": []}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
@@ -224,7 +243,8 @@ SYSTEM_PROMPT = (
     "若提到過去時間（上週五、昨天等）必須先計算出正確日期（YYYY-MM-DD）再填入 date 參數；"
     "note 只寫消費品項，不可包含日期時間詞；"
     "2.訊息含待辦提醒且無金額才呼叫 add_todo；"
-    "3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，本月用 month；"
+    "3.查詢花費記帳支出記錄等詞呼叫 query_expenses，今天用 period=today，本週用 week，本月用 month，上個月用 last_month；"
+    "指定月份（幾月、某月份、YYYY年M月）用 year_month=YYYY-MM；"
     "任何指定日期（無論是數字、中文、昨天前天上週五等）都先計算出 YYYY-MM-DD 再用 date 參數；"
     "4.查詢待辦呼叫 query_todos；"
     "5.清空刪除全部花費呼叫 clear_expenses；"
