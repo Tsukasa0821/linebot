@@ -11,6 +11,10 @@ from flask import Flask, request, abort
 
 app = Flask(__name__)
 
+# Pending delete confirmations per user
+pending_delete = {}  # {user_id: {"name": str, "args": dict}}
+DELETE_TOOLS = {"clear_expenses", "clear_todos", "delete_expense", "delete_todo"}
+
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -288,7 +292,24 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 
-def handle_message(user_text: str) -> str:
+def _delete_desc(name: str, args: dict) -> str:
+    if name == "clear_expenses":
+        return "所有記帳紀錄"
+    elif name == "clear_todos":
+        return "所有待辦事項"
+    elif name == "delete_expense":
+        return f"含「{args.get('keyword', '')}」的記帳記錄"
+    elif name == "delete_todo":
+        return f"含「{args.get('keyword', '')}」的待辦事項"
+    return "此資料"
+
+
+def _confirm_msg(name: str, args: dict) -> str:
+    desc = _delete_desc(name, args)
+    return f"⚠️ 確認要刪除{desc}嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+
+
+def handle_message(user_text: str, user_id: str = "") -> str:
     _now_tw = _tw_now()
     today = _now_tw.strftime("%Y-%m-%d")
     weekday = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"][_now_tw.weekday()]
@@ -304,8 +325,12 @@ def handle_message(user_text: str) -> str:
             return msg.get("content") or "（無法理解指令）"
         results = []
         for tc in tool_calls:
+            fname = tc["function"]["name"]
             args = json.loads(tc["function"]["arguments"]) or {}
-            result = run_tool(tc["function"]["name"], args)
+            if fname in DELETE_TOOLS and user_id:
+                pending_delete[user_id] = {"name": fname, "args": args}
+                return _confirm_msg(fname, args)
+            result = run_tool(fname, args)
             results.append(result)
         return "\n".join(results)
     err = data.get("error", {})
@@ -316,6 +341,9 @@ def handle_message(user_text: str) -> str:
         if fname_m:
             fname = fname_m.group(1)
             args = json.loads(args_m.group(1)) if args_m else {}
+            if fname in DELETE_TOOLS and user_id:
+                pending_delete[user_id] = {"name": fname, "args": args}
+                return _confirm_msg(fname, args)
             return run_tool(fname, args)
     return f"Groq錯誤：{data}"
 
@@ -333,10 +361,29 @@ def webhook():
                 continue
             if event["message"].get("type") != "text":
                 continue
-            user_text = event["message"]["text"]
+            user_text = event["message"]["text"].strip()
             user_id = event["source"]["userId"]
+            # Handle pending delete confirmation
+            if user_id in pending_delete:
+                if user_text == "確認刪除":
+                    op = pending_delete.pop(user_id)
+                    try:
+                        result = run_tool(op["name"], op["args"])
+                    except Exception as e:
+                        result = f"⚠️ 刪除失敗：{str(e)}"
+                    push_message(user_id, result)
+                    continue
+                elif user_text == "取消":
+                    pending_delete.pop(user_id)
+                    push_message(user_id, "✅ 已取消，資料未刪除。")
+                    continue
+                elif user_text in ("是", "yes", "YES", "對", "ok", "OK", "好"):
+                    push_message(user_id, "⚠️ 請輸入【確認刪除】才可執行刪除。")
+                    continue
+                else:
+                    pending_delete.pop(user_id)
             try:
-                reply = handle_message(user_text)
+                reply = handle_message(user_text, user_id)
             except Exception as e:
                 reply = f"⚠️ 出錯了：{str(e)}"
             push_message(user_id, reply)
