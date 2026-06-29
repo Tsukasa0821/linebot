@@ -197,16 +197,30 @@ def clear_todos() -> str:
     return f"✅ 已清空 {len(results)} 筆待辦事項"
 
 
-def delete_expense(keyword: str) -> str:
+def delete_expense(keyword: str, date: str = None, amount: int = None) -> str:
     results, qerr = _notion_query_all(NOTION_EXPENSE_DB_ID, {})
     if qerr:
         return f"❌ 查詢失敗：{qerr}"
-    matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+    matched = []
+    for r in results:
+        props = r["properties"]
+        name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else ""
+        if keyword and keyword not in name:
+            continue
+        if date:
+            r_date = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+            if r_date != date:
+                continue
+        if amount is not None:
+            r_amount = props["金額"]["number"] or 0
+            if r_amount != amount:
+                continue
+        matched.append(r)
     if not matched:
-        return f"❌ 找不到含「{keyword}」的記帳記錄"
+        return "❌ 找不到符合條件的記帳記錄"
     for r in matched:
         requests.patch(f"https://api.notion.com/v1/pages/{r['id']}", headers=NOTION_HEADERS, json={"archived": True})
-    return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的記帳記錄"
+    return f"✅ 已刪除 {len(matched)} 筆記帳記錄"
 
 
 def delete_todo(keyword: str) -> str:
@@ -237,7 +251,11 @@ TOOLS = [
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "clear_expenses", "description": "清空刪除所有記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "clear_todos", "description": "清空刪除所有待辦事項", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定的某筆記帳花費（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定記帳花費。用戶貼上記錄行（如：2026-06-27  [電影] 電影  $260）時，從中提取 keyword=品項名稱、date=日期、amount=金額。", "parameters": {"type": "object", "properties": {
+        "keyword": {"type": "string", "description": "記帳品項名稱關鍵字"},
+        "date": {"type": "string", "description": "日期 YYYY-MM-DD（可選，用於精確匹配）"},
+        "amount": {"type": "integer", "description": "金額（可選，用於精確匹配）"}
+    }, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
 ]
 
@@ -292,21 +310,75 @@ def run_tool(name: str, args: dict) -> str:
     return "未知工具"
 
 
-def _delete_desc(name: str, args: dict) -> str:
-    if name == "clear_expenses":
-        return "所有記帳紀錄"
-    elif name == "clear_todos":
-        return "所有待辦事項"
-    elif name == "delete_expense":
-        return f"含「{args.get('keyword', '')}」的記帳記錄"
-    elif name == "delete_todo":
-        return f"含「{args.get('keyword', '')}」的待辦事項"
-    return "此資料"
-
-
-def _confirm_msg(name: str, args: dict) -> str:
-    desc = _delete_desc(name, args)
-    return f"⚠️ 確認要刪除{desc}嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
+    if fname == "clear_expenses":
+        results, qerr = _notion_query_all(NOTION_EXPENSE_DB_ID, {})
+        if qerr:
+            return f"❌ 查詢失敗：{qerr}"
+        if not results:
+            return "💭 記帳本來就是空的"
+        ids = [r["id"] for r in results]
+        pending_delete[user_id] = {"page_ids": ids}
+        return f"⚠️ 確認要刪除所有 {len(ids)} 筆記帳紀錄嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+    elif fname == "clear_todos":
+        results, qerr = _notion_query_all(NOTION_TODO_DB_ID, {})
+        if qerr:
+            return f"❌ 查詢失敗：{qerr}"
+        if not results:
+            return "💭 待辦本來就是空的"
+        ids = [r["id"] for r in results]
+        pending_delete[user_id] = {"page_ids": ids}
+        return f"⚠️ 確認要刪除所有 {len(ids)} 筆待辦事項嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+    elif fname == "delete_expense":
+        keyword = args.get("keyword", "")
+        date = args.get("date")
+        amount = args.get("amount")
+        results, qerr = _notion_query_all(NOTION_EXPENSE_DB_ID, {})
+        if qerr:
+            return f"❌ 查詢失敗：{qerr}"
+        matched = []
+        for r in results:
+            props = r["properties"]
+            name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else ""
+            if keyword and keyword not in name:
+                continue
+            if date:
+                r_date = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+                if r_date != date:
+                    continue
+            if amount is not None:
+                r_amount = props["金額"]["number"] or 0
+                if r_amount != amount:
+                    continue
+            matched.append(r)
+        if not matched:
+            return "❌ 找不到符合條件的記帳記錄"
+        lines = []
+        for r in matched:
+            props = r["properties"]
+            n = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
+            amt = props["金額"]["number"] or 0
+            cat = props["分類"]["select"]["name"] if props["分類"]["select"] else "其他"
+            d = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+            lines.append(f"  {d}  [{cat}] {n}  ${amt}")
+        ids = [r["id"] for r in matched]
+        pending_delete[user_id] = {"page_ids": ids}
+        desc = "\n".join(lines)
+        return f"⚠️ 確認要刪除以下 {len(ids)} 筆記帳紀錄嗎？\n\n{desc}\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+    elif fname == "delete_todo":
+        keyword = args.get("keyword", "")
+        results, qerr = _notion_query_all(NOTION_TODO_DB_ID, {})
+        if qerr:
+            return f"❌ 查詢失敗：{qerr}"
+        matched = [r for r in results if keyword in (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "")]
+        if not matched:
+            return f"❌ 找不到含「{keyword}」的待辦事項"
+        lines = ["  • " + (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）") for r in matched]
+        ids = [r["id"] for r in matched]
+        pending_delete[user_id] = {"page_ids": ids}
+        desc = "\n".join(lines)
+        return f"⚠️ 確認要刪除以下 {len(ids)} 筆待辦事項嗎？\n\n{desc}\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+    return "❌ 未知操作"
 
 
 def handle_message(user_text: str, user_id: str = "") -> str:
@@ -328,8 +400,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
             fname = tc["function"]["name"]
             args = json.loads(tc["function"]["arguments"]) or {}
             if fname in DELETE_TOOLS and user_id:
-                pending_delete[user_id] = {"name": fname, "args": args}
-                return _confirm_msg(fname, args)
+                return _prepare_delete(user_id, fname, args)
             result = run_tool(fname, args)
             results.append(result)
         return "\n".join(results)
@@ -342,8 +413,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
             fname = fname_m.group(1)
             args = json.loads(args_m.group(1)) if args_m else {}
             if fname in DELETE_TOOLS and user_id:
-                pending_delete[user_id] = {"name": fname, "args": args}
-                return _confirm_msg(fname, args)
+                return _prepare_delete(user_id, fname, args)
             return run_tool(fname, args)
     return f"Groq錯誤：{data}"
 
@@ -367,8 +437,15 @@ def webhook():
             if user_id in pending_delete:
                 if user_text == "確認刪除":
                     op = pending_delete.pop(user_id)
+                    page_ids = op.get("page_ids", [])
                     try:
-                        result = run_tool(op["name"], op["args"])
+                        for pid in page_ids:
+                            requests.patch(
+                                f"https://api.notion.com/v1/pages/{pid}",
+                                headers=NOTION_HEADERS,
+                                json={"archived": True}
+                            )
+                        result = f"✅ 已刪除 {len(page_ids)} 筆資料"
                     except Exception as e:
                         result = f"⚠️ 刪除失敗：{str(e)}"
                     push_message(user_id, result)
