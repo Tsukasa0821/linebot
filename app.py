@@ -249,7 +249,11 @@ TOOLS = [
     }, "required": []}}},
     {"type": "function", "function": {"name": "add_todo", "description": "新增待辦事項", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "note": {"type": "string"}}, "required": ["title"]}}},
     {"type": "function", "function": {"name": "query_todos", "description": "查詢待辦清單", "parameters": {"type": "object", "properties": {}}}},
-    {"type": "function", "function": {"name": "clear_expenses", "description": "清空刪除所有記帳花費紀錄", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "clear_expenses", "description": "清除記帳花費紀錄，可指定時間範圍；不指定刪全部。", "parameters": {"type": "object", "properties": {
+        "period": {"type": "string", "enum": ["today", "week", "month", "last_month", "all"], "description": "today=今天, week=本週, month=本月, last_month=上個月, all=全部"},
+        "date": {"type": "string", "description": "指定日期 YYYY-MM-DD"},
+        "year_month": {"type": "string", "description": "指定月份 YYYY-MM"}
+    }}}},
     {"type": "function", "function": {"name": "clear_todos", "description": "清空刪除所有待辦事項", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "delete_expense", "description": "刪除指定記帳花費。用戶貼上記錄行（如：2026-06-27  [電影] 電影  $260）時，從中提取 keyword=品項名稱、date=日期、amount=金額。", "parameters": {"type": "object", "properties": {
         "keyword": {"type": "string", "description": "記帳品項名稱關鍵字"},
@@ -269,7 +273,7 @@ SYSTEM_PROMPT = (
     "指定月份（幾月、某月份、YYYY年M月）用 year_month=YYYY-MM；"
     "任何指定日期（無論是數字、中文、昨天前天上週五等）都先計算出 YYYY-MM-DD 再用 date 參數；"
     "4.查詢待辦呼叫 query_todos；"
-    "5.清空刪除全部花費呼叫 clear_expenses；"
+    "5.清空刪除花費呼叫 clear_expenses；本月用 period=month，上個月用 period=last_month，指定月份用 year_month=YYYY-MM，指定日期用 date=YYYY-MM-DD，不指定時間為全部；"
     "6.清空刪除全部待辦呼叫 clear_todos；"
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo。"
@@ -312,23 +316,80 @@ def run_tool(name: str, args: dict) -> str:
 
 def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
     if fname == "clear_expenses":
-        results, qerr = _notion_query_all(NOTION_EXPENSE_DB_ID, {})
+        period = args.get("period", "all")
+        date_arg = args.get("date")
+        year_month = args.get("year_month")
+        today_d = _tw_now().date()
+        if date_arg:
+            date_arg = date_arg.replace("/", "-").replace(".", "-")
+            filter_obj = {"property": "日期", "date": {"equals": date_arg}}
+            label = date_arg
+            payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+        elif year_month:
+            year_month = year_month.replace("/", "-").replace(".", "-")
+            yr, mo = map(int, year_month.split("-"))
+            start = f"{yr:04d}-{mo:02d}-01"
+            if mo == 12:
+                end_dt = datetime.date(yr + 1, 1, 1) - datetime.timedelta(days=1)
+            else:
+                end_dt = datetime.date(yr, mo + 1, 1) - datetime.timedelta(days=1)
+            filter_obj = {"and": [{"property": "日期", "date": {"on_or_after": start}}, {"property": "日期", "date": {"on_or_before": end_dt.isoformat()}}]}
+            label = f"{yr}年{mo}月"
+            payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+        elif period == "last_month":
+            first_of_this_month = today_d.replace(day=1)
+            lm_end = first_of_this_month - datetime.timedelta(days=1)
+            lm_start = lm_end.replace(day=1)
+            filter_obj = {"and": [{"property": "日期", "date": {"on_or_after": lm_start.isoformat()}}, {"property": "日期", "date": {"on_or_before": lm_end.isoformat()}}]}
+            label = f"{lm_start.year}年{lm_start.month}月"
+            payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+        elif period == "today":
+            filter_obj = {"property": "日期", "date": {"equals": today_d.isoformat()}}
+            label = "今天"
+            payload = {"filter": filter_obj}
+        elif period == "week":
+            start = (today_d - datetime.timedelta(days=today_d.weekday())).isoformat()
+            filter_obj = {"property": "日期", "date": {"on_or_after": start}}
+            label = "本週"
+            payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+        elif period == "month":
+            start = today_d.replace(day=1).isoformat()
+            filter_obj = {"property": "日期", "date": {"on_or_after": start}}
+            label = "本月"
+            payload = {"filter": filter_obj, "sorts": [{"property": "日期", "direction": "ascending"}]}
+        else:
+            payload = {}
+            label = "全部"
+        results, qerr = _notion_query_all(NOTION_EXPENSE_DB_ID, payload)
         if qerr:
             return f"❌ 查詢失敗：{qerr}"
         if not results:
-            return "💭 記帳本來就是空的"
+            return f"💭 {label}記帳本來就是空的"
+        lines = []
+        total = 0
+        for r in results:
+            props = r["properties"]
+            n = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
+            amt = props["金額"]["number"] or 0
+            cat = props["分類"]["select"]["name"] if props["分類"]["select"] else "其他"
+            d = props["日期"]["date"]["start"] if props["日期"]["date"] else ""
+            total += amt
+            lines.append(f"  {d}  [{cat}] {n}  ${amt}")
         ids = [r["id"] for r in results]
         pending_delete[user_id] = {"page_ids": ids}
-        return f"⚠️ 確認要刪除所有 {len(ids)} 筆記帳紀錄嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+        desc = "\n".join(lines)
+        return f"⚠️ 確認要刪除{label}以下 {len(ids)} 筆記帳紀錄嗎？\n\n{desc}\n💰 合計：${total}\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
     elif fname == "clear_todos":
         results, qerr = _notion_query_all(NOTION_TODO_DB_ID, {})
         if qerr:
             return f"❌ 查詢失敗：{qerr}"
         if not results:
             return "💭 待辦本來就是空的"
+        lines = ["  • " + (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）") for r in results]
         ids = [r["id"] for r in results]
         pending_delete[user_id] = {"page_ids": ids}
-        return f"⚠️ 確認要刪除所有 {len(ids)} 筆待辦事項嗎？\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+        desc = "\n".join(lines)
+        return f"⚠️ 確認要刪除所有 {len(ids)} 筆待辦事項嗎？\n\n{desc}\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
     elif fname == "delete_expense":
         keyword = args.get("keyword", "")
         date = args.get("date")
