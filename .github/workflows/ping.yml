@@ -2,12 +2,14 @@ name: Keep Render Alive
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    - cron: '*/10 * * * *'  # Every 10 minutes
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Render service
-        run: curl -s --max-time 60 https://linebot-14qy.onrender.com/ || true
+        run: |
+          echo "Pinging https://linebot-l4qy.onrender.com/"
+          curl -sf --max-time 60 https://linebot-l4qy.onrender.com/ && echo "✅ Service is alive" || echo "⚠️ Service did not respond in time"
