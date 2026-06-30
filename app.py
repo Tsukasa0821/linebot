@@ -7,6 +7,7 @@ import base64
 import datetime
 import requests
 import threading
+import time
 from flask import Flask, request, abort
 
 app = Flask(__name__)
@@ -14,6 +15,37 @@ app = Flask(__name__)
 # Pending delete confirmations per user
 pending_delete = {}  # {user_id: {"name": str, "args": dict}}
 DELETE_TOOLS = {"clear_expenses", "clear_todos", "delete_expense", "delete_todo"}
+
+_STATE_FILE = "/tmp/friday_state.json"
+_STARTUP_TIME = time.time()
+
+
+def _save_user_state(user_id: str):
+    """Save last active user ID and timestamp for wake-up notification."""
+    try:
+        with open(_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"uid": user_id, "ts": time.time()}, f)
+    except Exception:
+        pass
+
+
+def _startup_wakeup():
+    """On startup, notify last active user if service was sleeping (>18 min inactive)."""
+    time.sleep(4)
+    try:
+        if not os.path.exists(_STATE_FILE):
+            return
+        with open(_STATE_FILE, encoding="utf-8") as f:
+            state = json.load(f)
+        uid = state.get("uid", "")
+        last_ts = state.get("ts", 0)
+        if uid and (time.time() - last_ts) > 1080:  # 18+ minutes → was sleeping
+            push_message(uid, "⚡ 我剛從睡眠中醒來！\n如果剛才有傳訊息沒收到回覆，請再說一次 😊")
+    except Exception:
+        pass
+
+
+threading.Thread(target=_startup_wakeup, daemon=True).start()
 
 LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -525,12 +557,23 @@ def webhook():
             except Exception as e:
                 reply = f"⚠️ 出錯了：{str(e)}"
             push_message(user_id, reply)
+            _save_user_state(user_id)
     threading.Thread(target=process_events, daemon=True).start()
     return "OK"
 
 
 @app.route("/", methods=["GET"])
 def health():
+    # Update last-seen timestamp on ping to prevent false wake-up notifications
+    try:
+        if os.path.exists(_STATE_FILE):
+            with open(_STATE_FILE, encoding="utf-8") as f:
+                state = json.load(f)
+            state["ts"] = time.time()
+            with open(_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f)
+    except Exception:
+        pass
     return "小飛在線上 ✅"
 
 
