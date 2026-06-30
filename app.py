@@ -574,7 +574,7 @@ def health():
                 json.dump(state, f)
     except Exception:
         pass
-    return "小飛在線上 ✅"
+    return "Friday在線上 ✅"
 
 
 if __name__ == "__main__":
