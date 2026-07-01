@@ -646,7 +646,7 @@ def run_tool(name: str, args: dict) -> str:
     elif name == "postpone_work_task":
         return postpone_work_task(**args)
     elif name == "list_work_tasks":
-        return list_work_tasks()
+        return list_work_tasks(**args)
     return "未知工具"
 
 
