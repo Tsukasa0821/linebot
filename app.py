@@ -568,9 +568,18 @@ TOOLS = [
         "keyword": {"type": "string", "description": "工作任務關鍵字"},
         "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
     }, "required": ["keyword", "new_deadline"]}}},
-    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單。指定日期（今天/明天/後天/X月X日/具體日期）用 date=YYYY-MM-DD；週期用 period（this_week本週/next_week下週/this_month本月/next_month下個月/overdue逾期/all全部）。date 優先於 period。", "parameters": {"type": "object", "properties": {
-        "period": {"type": "string", "enum": ["all", "this_week", "next_week", "this_month", "next_month", "overdue"], "description": "週期篩選：this_week=本週/這週, next_week=下週/下禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期未完成, all=全部"},
-        "date": {"type": "string", "description": "精確日期 YYYY-MM-DD。今天/明天/後天/X月X日/大後天等時間表達都計算成具體日期後填入。有 date 時忽略 period。"}
+    {"type": "function", "function": {"name": "list_work_tasks", "description": (
+        "查詢工作任務清單。訊息含任何時間範圍時必須傳對應參數，不可用預設值！\n"
+        "■ 精確日期（今天/明天/後天/大後天/X月X日/下週二等某一天）→ 計算 YYYY-MM-DD 傳 date\n"
+        "■ 本週/這週/這禮拜 → period=this_week\n"
+        "■ 下週/下禮拜/下個禮拜 → period=next_week\n"
+        "■ 本月/這個月 → period=this_month\n"
+        "■ 下個月/下月 → period=next_month\n"
+        "■ 逾期/過期/已過截止 → period=overdue\n"
+        "■ 完全沒說時間才用 period=all"
+    ), "parameters": {"type": "object", "properties": {
+        "period": {"type": "string", "enum": ["all", "this_week", "next_week", "this_month", "next_month", "overdue"], "description": "this_week=本週/這週/這禮拜, next_week=下週/下禮拜/下個禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期, all=全部（無時間限定時才用）"},
+        "date": {"type": "string", "description": "精確單日 YYYY-MM-DD。今天/明天/後天/大後天/X月X日/下週二等均計算成具體日期。有此參數時 period 無效。"}
     }}}},
 ]
 
@@ -589,10 +598,11 @@ SYSTEM_PROMPT = (
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
     "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
-    "10.查詢工作任務清單呼叫 list_work_tasks；"
-    "指定日期（今天/明天/後天/大後天/X月X日/下週二等具體某天）計算成 YYYY-MM-DD 傳 date 參數；"
-    "週期查詢：本週/這週→period=this_week，下週/下禮拜→period=next_week，本月/這個月→period=this_month，下個月→period=next_month，逾期→period=overdue，未指定→period=all；"
-    "date 有值時忽略 period；"
+    "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
+    "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
+    "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；"
+    "本月/這個月→period=this_month；下個月→period=next_month；逾期/過期→period=overdue；"
+    "完全沒提時間才用 period=all；"
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
