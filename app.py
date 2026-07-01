@@ -9,6 +9,7 @@ import requests
 import threading
 import time
 from flask import Flask, request, abort
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -53,6 +54,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_EXPENSE_DB_ID = os.environ.get("NOTION_EXPENSE_DB_ID", "")
 NOTION_TODO_DB_ID = os.environ.get("NOTION_TODO_DB_ID", "")
+NOTION_WORK_DB_ID = os.environ.get("NOTION_WORK_DB_ID", "")
 
 NOTION_HEADERS = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -267,6 +269,201 @@ def delete_todo(keyword: str) -> str:
     return f"✅ 已刪除 {len(matched)} 筆含「{keyword}」的待辦事項"
 
 
+
+# ─── Work task functions ──────────────────────────────────────────────────────
+
+def add_work_task(description: str, deadline: str = None) -> str:
+    """Add a work task to Notion work task database."""
+    props = {
+        "名稱": {"title": [{"text": {"content": description}}]},
+        "狀態": {"select": {"name": "待處理"}},
+    }
+    if deadline:
+        deadline = deadline.replace("/", "-").replace(".", "-")
+        props["截止日期"] = {"date": {"start": deadline}}
+    data = {
+        "parent": {"database_id": NOTION_WORK_DB_ID},
+        "properties": props,
+    }
+    res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
+    deadline_str = f"，截止：{deadline}" if deadline else ""
+    return f"✅ 已新增工作任務：{description}{deadline_str}" if res.status_code == 200 else f"❌ 新增失敗：{res.text}"
+
+
+def complete_work_task(keyword: str) -> str:
+    """Mark a work task as completed."""
+    results, qerr = _notion_query_all(
+        NOTION_WORK_DB_ID,
+        {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
+    )
+    if qerr:
+        return f"❌ 查詢失敗：{qerr}"
+    matched = [r for r in results if keyword in (
+        r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else ""
+    )]
+    if not matched:
+        return f"❌ 找不到含「{keyword}」的工作任務"
+    for r in matched:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",
+            headers=NOTION_HEADERS,
+            json={"properties": {"狀態": {"select": {"name": "已完成"}}}}
+        )
+    names = [r["properties"]["名稱"]["title"][0]["plain_text"] for r in matched if r["properties"]["名稱"]["title"]]
+    return f"✅ 已完成：{'、'.join(names)}"
+
+
+def postpone_work_task(keyword: str, new_deadline: str) -> str:
+    """Postpone a work task deadline."""
+    new_deadline = new_deadline.replace("/", "-").replace(".", "-")
+    results, qerr = _notion_query_all(
+        NOTION_WORK_DB_ID,
+        {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
+    )
+    if qerr:
+        return f"❌ 查詢失敗：{qerr}"
+    matched = [r for r in results if keyword in (
+        r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else ""
+    )]
+    if not matched:
+        return f"❌ 找不到含「{keyword}」的工作任務"
+    for r in matched:
+        requests.patch(
+            f"https://api.notion.com/v1/pages/{r['id']}",
+            headers=NOTION_HEADERS,
+            json={"properties": {"截止日期": {"date": {"start": new_deadline}}}}
+        )
+    names = [r["properties"]["名稱"]["title"][0]["plain_text"] for r in matched if r["properties"]["名稱"]["title"]]
+    return f"✅ 已將「{'、'.join(names)}」延期至 {new_deadline}"
+
+
+def list_work_tasks() -> str:
+    """List all pending work tasks sorted by deadline."""
+    results, qerr = _notion_query_all(
+        NOTION_WORK_DB_ID,
+        {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
+    )
+    if qerr:
+        return f"❌ 查詢失敗：{qerr}"
+    if not results:
+        return "🎉 目前沒有待處理的工作任務！"
+
+    today = _tw_now().date()
+    overdue, today_tasks, upcoming, no_deadline = [], [], [], []
+
+    for r in results:
+        props = r["properties"]
+        name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
+        dl_prop = props.get("截止日期", {}).get("date")
+        if dl_prop and dl_prop.get("start"):
+            dl = datetime.date.fromisoformat(dl_prop["start"])
+            if dl < today:
+                overdue.append((dl, name))
+            elif dl == today:
+                today_tasks.append((dl, name))
+            else:
+                upcoming.append((dl, name))
+        else:
+            no_deadline.append(name)
+
+    overdue.sort(key=lambda x: x[0])
+    today_tasks.sort(key=lambda x: x[0])
+    upcoming.sort(key=lambda x: x[0])
+
+    lines = ["📋 工作任務清單"]
+    if overdue:
+        lines.append("\n⚠️ 逾期：")
+        for d, n in overdue:
+            lines.append(f"  • {n}（截止：{d.strftime('%m/%d')}）")
+    if today_tasks:
+        lines.append("\n📌 今天截止：")
+        for _, n in today_tasks:
+            lines.append(f"  • {n}")
+    if upcoming:
+        lines.append("\n📅 即將到期：")
+        for d, n in upcoming:
+            lines.append(f"  • {n}（{d.strftime('%m/%d')}）")
+    if no_deadline:
+        lines.append("\n📝 進行中（無截止日期）：")
+        for n in no_deadline:
+            lines.append(f"  • {n}")
+
+    return "\n".join(lines)
+
+
+def morning_reminder():
+    """Send morning work task reminder at 9am Taiwan time (scheduled at 1am UTC)."""
+    try:
+        if not os.path.exists(_STATE_FILE):
+            return
+        with open(_STATE_FILE, encoding="utf-8") as f:
+            state = json.load(f)
+        uid = state.get("uid", "")
+        if not uid or not NOTION_WORK_DB_ID:
+            return
+
+        today = _tw_now().date()
+        week_end = today + datetime.timedelta(days=7)
+
+        results, qerr = _notion_query_all(
+            NOTION_WORK_DB_ID,
+            {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
+        )
+        if qerr or not results:
+            return
+
+        overdue, today_tasks, upcoming, no_deadline = [], [], [], []
+        for r in results:
+            props = r["properties"]
+            name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
+            dl_prop = props.get("截止日期", {}).get("date")
+            if dl_prop and dl_prop.get("start"):
+                dl = datetime.date.fromisoformat(dl_prop["start"])
+                if dl < today:
+                    overdue.append((dl, name))
+                elif dl == today:
+                    today_tasks.append((dl, name))
+                elif dl <= week_end:
+                    upcoming.append((dl, name))
+            else:
+                no_deadline.append(name)
+
+        overdue.sort(key=lambda x: x[0])
+        today_tasks.sort(key=lambda x: x[0])
+        upcoming.sort(key=lambda x: x[0])
+
+        if not (overdue or today_tasks or upcoming or no_deadline):
+            return
+
+        lines = [f"🌅 早安！{today.strftime('%m/%d')} 工作提醒："]
+        if overdue:
+            lines.append("\n⚠️ 逾期未完成：")
+            for d, n in overdue:
+                lines.append(f"  • {n}（截止：{d.strftime('%m/%d')}）")
+        if today_tasks:
+            lines.append("\n📌 今天截止：")
+            for _, n in today_tasks:
+                lines.append(f"  • {n}")
+        if upcoming:
+            lines.append("\n📅 本週即將到期：")
+            for d, n in upcoming:
+                lines.append(f"  • {n}（{d.strftime('%m/%d')}）")
+        if no_deadline:
+            lines.append("\n📝 進行中（無截止日期）：")
+            for n in no_deadline:
+                lines.append(f"  • {n}")
+
+        push_message(uid, "\n".join(lines))
+    except Exception as e:
+        print(f"morning_reminder error: {e}")
+
+
+# Schedule morning reminder at 9am Taiwan time = 1am UTC
+_scheduler = BackgroundScheduler()
+_scheduler.add_job(morning_reminder, 'cron', hour=1, minute=0)
+_scheduler.start()
+
+
 TOOLS = [
     {"type": "function", "function": {"name": "add_expense", "description": "記錄一筆消費", "parameters": {"type": "object", "properties": {
         "amount": {"type": "integer", "description": "消費金額"},
@@ -293,6 +490,18 @@ TOOLS = [
         "amount": {"type": "integer", "description": "金額（可選，用於精確匹配）"}
     }, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
+   {"type": "function", "function": {"name": "add_work_task", "description": "新增工作任務，可附截止日期", "parameters": {"type": "object", "properties": {
+        "description": {"type": "string", "description": "工作任務內容描述"},
+        "deadline": {"type": "string", "description": "截止日期 YYYY-MM-DD（可選）。有提到日期時計算後填入。"}
+    }, "required": ["description"]}}},
+    {"type": "function", "function": {"name": "complete_work_task", "description": "標記工作任務為已完成", "parameters": {"type": "object", "properties": {
+        "keyword": {"type": "string", "description": "工作任務關鍵字"}
+    }, "required": ["keyword"]}}},
+    {"type": "function", "function": {"name": "postpone_work_task", "description": "延期工作任務截止日期", "parameters": {"type": "object", "properties": {
+        "keyword": {"type": "string", "description": "工作任務關鍵字"},
+        "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
+    }, "required": ["keyword", "new_deadline"]}}},
+    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單，按截止日期排序，顯示逾期/今天/本週/無截止日期", "parameters": {"type": "object", "properties": {}}}},
 ]
 
 SYSTEM_PROMPT = (
@@ -308,7 +517,11 @@ SYSTEM_PROMPT = (
     "5.清空刪除花費呼叫 clear_expenses；本月用 period=month，上個月用 period=last_month，指定月份用 year_month=YYYY-MM，指定日期用 date=YYYY-MM-DD，不指定時間為全部；"
     "6.清空刪除全部待辦呼叫 clear_todos；"
     "7.刪除指定花費呼叫 delete_expense；"
-    "8.刪除指定待辦呼叫 delete_todo。"
+    "8.刪除指定待辦呼叫 delete_todo；"
+    "9.新增工作任務（記錄工作、今天要做、工作安排、處理某件事、工作項目）呼叫 add_work_task，有提到截止日期時計算後填入 deadline；"
+    "10.查詢工作任務清單呼叫 list_work_tasks；"
+    "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
+    "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
 )
 
@@ -343,6 +556,14 @@ def run_tool(name: str, args: dict) -> str:
         return delete_expense(**args)
     elif name == "delete_todo":
         return delete_todo(**args)
+    elif name == "add_work_task":
+        return add_work_task(**args)
+    elif name == "complete_work_task":
+        return complete_work_task(**args)
+    elif name == "postpone_work_task":
+        return postpone_work_task(**args)
+    elif name == "list_work_tasks":
+        return list_work_tasks()
     return "未知工具"
 
 
