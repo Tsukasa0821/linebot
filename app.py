@@ -490,9 +490,9 @@ TOOLS = [
         "amount": {"type": "integer", "description": "金額（可選，用於精確匹配）"}
     }, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
-   {"type": "function", "function": {"name": "add_work_task", "description": "新增工作任務，可附截止日期", "parameters": {"type": "object", "properties": {
-        "description": {"type": "string", "description": "工作任務內容描述"},
-        "deadline": {"type": "string", "description": "截止日期 YYYY-MM-DD（可選）。有提到日期時計算後填入。"}
+   {"type": "function", "function": {"name": "add_work_task", "description": "新增工作任務到工作清單。用戶說「X之前要做/交/完成/生出Y」、「X截止的Y」、「X前要Y」、「要在X前完成Y」都呼叫此工具。description只填工作內容，不含任何時間詞；deadline填計算後的截止日期。", "parameters": {"type": "object", "properties": {
+        "description": {"type": "string", "description": "工作任務內容，不含日期時間詞。例：「生出LC-300測試SOP」而非「下禮拜二前生出LC-300測試SOP」"},
+        "deadline": {"type": "string", "description": "截止日期 YYYY-MM-DD。任何時間表達（下禮拜二、下週五、月底、X號前等）都計算成具體日期後填入。"}
     }, "required": ["description"]}}},
     {"type": "function", "function": {"name": "complete_work_task", "description": "標記工作任務為已完成", "parameters": {"type": "object", "properties": {
         "keyword": {"type": "string", "description": "工作任務關鍵字"}
@@ -518,7 +518,7 @@ SYSTEM_PROMPT = (
     "6.清空刪除全部待辦呼叫 clear_todos；"
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
-    "9.新增工作任務（記錄工作、今天要做、工作安排、處理某件事、工作項目）呼叫 add_work_task，有提到截止日期時計算後填入 deadline；"
+    "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
     "10.查詢工作任務清單呼叫 list_work_tasks；"
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
