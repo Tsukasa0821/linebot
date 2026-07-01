@@ -348,7 +348,7 @@ def batch_add_work_tasks(content: str) -> str:
                 r2 = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS,
                                    json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
                 label = f"{d2.strftime('%m/%d')} {task}"
-                ;(created if r2.status_code == 200 else errors).append(label)
+                (created if r2.status_code == 200 else errors).append(label)
                 d2 += datetime.timedelta(days=1)
         elif sm2:
             task = sm2.group(2).split('(')[0].split('（')[0].rstrip('。').strip()
@@ -363,7 +363,7 @@ def batch_add_work_tasks(content: str) -> str:
             r2 = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS,
                                json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
             label = f"{dt2.strftime('%m/%d')} {task}"
-            ;(created if r2.status_code == 200 else errors).append(label)
+            (created if r2.status_code == 200 else errors).append(label)
     if not created and not errors:
         return "⚠️ 未找到可解析的工作任務（需格式 M/D : 工作 或 M/D~M/D : 工作）"
     result_parts = []
