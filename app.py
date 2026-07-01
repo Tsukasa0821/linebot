@@ -1340,8 +1340,8 @@ SYSTEM_PROMPT = (
     "6.清空刪除全部待辦呼叫 clear_todos；"
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
-    
-    "9b.批量工作計畫：若訊息含多行工作安排（行首有日期 M/D: 或 M/D~M/D: 格式），呼叫 batch_add_work_tasks 並傳入完整文字；"訊息表達「X前要Y」或任何工作安排，呼叫 add_work_task；description只填工作內容不含時間詞；若描述含 [M/D~M/D] 日期區間（如 [7/13~7/15]），原樣保留在 description，deadline 留空；否則 deadline 填 YYYY-MM-DD；"
+    "9.工作任務新增：訊息表達「X前要Y」或任何工作安排，呼叫 add_work_task；description只填工作內容不含時間詞；若描述含 [M/D~M/D] 日期區間（如 [7/13~7/15]），原樣保留在 description，deadline 留空；否則 deadline 填 YYYY-MM-DD；"
+    "9b.批量工作計畫：若訊息含多行工作安排（行首有日期 M/D: 或 M/D~M/D: 格式），呼叫 batch_add_work_tasks 並傳入完整文字；"
     "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
     "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
     "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；下下週/下下禮拜→period=next_next_week；"
