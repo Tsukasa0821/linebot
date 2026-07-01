@@ -465,6 +465,21 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
     return "\n".join(lines)
 
 
+def _get_line_display_name(uid: str) -> str:
+    """Fetch LINE user display name via profile API."""
+    try:
+        res = requests.get(
+            f"https://api.line.me/v2/bot/profile/{uid}",
+            headers={"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"},
+            timeout=5,
+        )
+        if res.status_code == 200:
+            return res.json().get("displayName", "")
+    except Exception:
+        pass
+    return ""
+
+
 def morning_reminder():
     """Send morning work task reminder at 9am Taiwan time (scheduled at 1am UTC)."""
     try:
@@ -481,12 +496,14 @@ def morning_reminder():
         weekday = today.weekday()  # 0=Mon ... 5=Sat 6=Sun
         day_names = ["（週一）", "（週二）", "（週三）", "（週四）", "（週五）", "（週六）", "（週日）"]
 
-        if weekday >= 5:  # 週末 → 顯示下週工作
+        if weekday >= 4:  # 週五/週末 → 顯示下週工作
             content = list_work_tasks(period="next_week")
-            greeting = f"🌅 早安！{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
+            name = _get_line_display_name(uid)
+            greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
         else:  # 平日 → 顯示今天+本週
             content = list_work_tasks(period="this_week")
-            greeting = f"🌅 早安！{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
+            name = _get_line_display_name(uid)
+            greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
         push_message(uid, greeting + content)
     except Exception as e:
