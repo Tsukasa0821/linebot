@@ -412,6 +412,11 @@ def batch_add_work_tasks(content: str) -> str:
     result_parts = []
     if created: result_parts.append(f"✅ 已新增 {len(created)} 筆：\n" + "\n".join(f"  • {c}" for c in created))
     if errors: result_parts.append("❌ 失敗：\n" + "\n".join(f"  • {e}" for e in errors))
+    # Auto-save memo if first line is [tag] or 「」 tag
+    _fl = content.strip().split('\n')[0].strip()
+    _at = re.match(r'^[\u3010\[](.+)[\u3011\]]$', _fl)
+    if _at and created:
+        save_memo(_at.group(1), content)
     return "\n".join(result_parts)
 
 def save_memo(tag: str, content: str) -> str:
@@ -783,7 +788,7 @@ SYSTEM_PROMPT = (
     "8.刪除指定待辦呼叫 delete_todo；"
     "9.工作任務新增：訊息表達「X前要Y」或任何工作安排，呼叫 add_work_task；description只填工作內容不含時間詞；若描述含 [M/D~M/D] 日期區間（如 [7/13~7/15]），原樣保留在 description，deadline 留空；否則 deadline 填 YYYY-MM-DD；"
     "9b.批量工作計畫：若訊息含多行工作安排（行首有日期 M/D: 或 M/D~M/D: 格式），呼叫 batch_add_work_tasks 並傳入完整文字；"
-    "9c.訊息含[標籤]且有多行工作計畫，除呼叫 batch_add_work_tasks 外，同時呼叫 save_memo（tag=標籤文字，content=原始完整訊息）；"
+    "9c.訊息第一行為[標籤]或《標籤》（如[燒機室]），後面有多行工作計畫（含 M/D 日期）：除呼叫 batch_add_work_tasks 外，同時呼叫 save_memo（tag=第一行括號內文字，content=完整訊息）；"
     "9d.用戶輸入單獨[關鍵字]格式（如[燒機室]），呼叫 get_memo(keyword=關鍵字)；"
     "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
     "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
@@ -985,7 +990,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         "測試週四早安提醒": 3, "測試週五早安提醒": 4,
         "測試週六早安提醒": 5, "測試週日早安提醒": 6,
     }
-    memo_q = re.match(r'^\[(.+)\]$', user_text.strip())
+    memo_q = re.match(r'^[\u3010\[](.+)[\u3011\]]$', user_text.strip())
     if memo_q:
         return get_memo(memo_q.group(1))
     if user_text.strip() in _TEST_DAY_MAP:
