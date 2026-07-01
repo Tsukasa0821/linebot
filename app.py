@@ -480,8 +480,10 @@ def _simulate_morning_reminder(weekday_override: int, uid: str) -> str:
         next_week_content = list_work_tasks(period="next_week")
         content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
-    else:  # 週一至週四
-        content = list_work_tasks(period="this_week")
+    else:  # 週一至週四 → 今天 + 本週
+        today_content = list_work_tasks(date=str(today))
+        this_week = list_work_tasks(period="this_week")
+        content = today_content + "\n\n" + this_week
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
     return greeting + content
 
@@ -527,8 +529,10 @@ def morning_reminder():
             next_week_content = list_work_tasks(period="next_week")
             content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
-        else:  # 週一至週四 → 今天+本週
-            content = list_work_tasks(period="this_week")
+        else:  # 週一至週四 → 今天 + 本週
+            today_content = list_work_tasks(date=str(today))
+            this_week = list_work_tasks(period="this_week")
+            content = today_content + "\n\n" + this_week
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
         push_message(uid, greeting + content)
