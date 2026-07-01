@@ -465,6 +465,27 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
     return "\n".join(lines)
 
 
+def _simulate_morning_reminder(weekday_override: int, uid: str) -> str:
+    """Build morning reminder content for a specific weekday (for testing)."""
+    tw_now = _tw_now()
+    today = tw_now.date()
+    day_names = ["（週一）", "（週二）", "（週三）", "（週四）", "（週五）", "（週六）", "（週日）"]
+    name = _get_line_display_name(uid) or "你"
+    if weekday_override >= 5:  # 週六/週日
+        content = list_work_tasks(period="next_week")
+        greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n以下是下週工作預覽：\n\n"
+    elif weekday_override == 4:  # 週五
+        today_content = list_work_tasks(date=str(today))
+        this_week = list_work_tasks(period="this_week")
+        next_week_content = list_work_tasks(period="next_week")
+        content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
+        greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
+    else:  # 週一至週四
+        content = list_work_tasks(period="this_week")
+        greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
+    return greeting + content
+
+
 def _get_line_display_name(uid: str) -> str:
     """Fetch LINE user display name via profile API."""
     try:
@@ -776,7 +797,16 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         {"role": "system", "content": SYSTEM_PROMPT + f" 今天：{today}（{weekday}）。"},
         {"role": "user", "content": user_text},
     ]
-    data = groq_chat(messages, TOOLS)
+    # ── 測試早安提醒指令 ──────────────────────────────────────────
+    _TEST_DAY_MAP = {
+        "測試週一早安提醒": 0, "測試週二早安提醒": 1, "測試週三早安提醒": 2,
+        "測試週四早安提醒": 3, "測試週五早安提醒": 4,
+        "測試週六早安提醒": 5, "測試週日早安提醒": 6,
+    }
+    if user_text.strip() in _TEST_DAY_MAP:
+        return _simulate_morning_reminder(_TEST_DAY_MAP[user_text.strip()], user_id)
+
+        data = groq_chat(messages, TOOLS)
     if "choices" in data:
         msg = data["choices"][0]["message"]
         tool_calls = msg.get("tool_calls")
