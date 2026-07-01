@@ -580,7 +580,7 @@ TOOLS = [
     ), "parameters": {"type": "object", "properties": {
         "period": {"type": "string", "enum": ["all", "this_week", "next_week", "this_month", "next_month", "overdue"], "description": "this_week=本週/這週/這禮拜, next_week=下週/下禮拜/下個禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期, all=全部（無時間限定時才用）"},
         "date": {"type": "string", "description": "精確單日 YYYY-MM-DD。今天/明天/後天/大後天/X月X日/下週二等均計算成具體日期。有此參數時 period 無效。"}
-    }, "required": ["period"]}}}},
+    }, "required": ["period"]}}},
 ]
 
 SYSTEM_PROMPT = (
