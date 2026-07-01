@@ -273,7 +273,37 @@ def delete_todo(keyword: str) -> str:
 # ─── Work task functions ──────────────────────────────────────────────────────
 
 def add_work_task(description: str, deadline: str = None) -> str:
-    """Add a work task to Notion work task database."""
+    """Add work task(s). Detects [M/D~M/D] range and creates one Notion entry per date."""
+    range_match = re.search(r'\[(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})\]', description)
+    if range_match:
+        clean_desc = (description[:range_match.start()] + description[range_match.end():]).strip()
+        year = _tw_now().year
+        try:
+            sm, sd = map(int, range_match.group(1).split('/'))
+            em, ed = map(int, range_match.group(2).split('/'))
+            start_dt = datetime.date(year, sm, sd)
+            end_dt = datetime.date(year, em, ed)
+            if end_dt < start_dt:
+                end_dt = datetime.date(year + 1, em, ed)
+        except (ValueError, IndexError):
+            return "❌ 日期區間格式錯誤"
+        dates, d = [], start_dt
+        while d <= end_dt:
+            dates.append(d)
+            d += datetime.timedelta(days=1)
+        for dt in dates:
+            props = {
+                "名稱": {"title": [{"text": {"content": clean_desc}}]},
+                "狀態": {"select": {"name": "待處理"}},
+                "截止日期": {"date": {"start": str(dt)}},
+            }
+            res = requests.post("https://api.notion.com/v1/pages",
+                                headers=NOTION_HEADERS,
+                                json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
+            if res.status_code != 200:
+                return f"❌ 新增失敗（{dt.strftime('%m/%d')}）：{res.text}"
+        date_list = "、".join(dt.strftime("%m/%d") for dt in dates)
+        return f"✅ 已新增 {len(dates)} 筆任務：{clean_desc}（{date_list}）"
     props = {
         "名稱": {"title": [{"text": {"content": description}}]},
         "狀態": {"select": {"name": "待處理"}},
@@ -281,14 +311,11 @@ def add_work_task(description: str, deadline: str = None) -> str:
     if deadline:
         deadline = deadline.replace("/", "-").replace(".", "-")
         props["截止日期"] = {"date": {"start": deadline}}
-    data = {
-        "parent": {"database_id": NOTION_WORK_DB_ID},
-        "properties": props,
-    }
-    res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS, json=data)
+    res = requests.post("https://api.notion.com/v1/pages",
+                        headers=NOTION_HEADERS,
+                        json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
     deadline_str = f"，截止：{deadline}" if deadline else ""
     return f"✅ 已新增工作任務：{description}{deadline_str}" if res.status_code == 200 else f"❌ 新增失敗：{res.text}"
-
 
 def complete_work_task(keyword: str) -> str:
     """Mark a work task as completed."""
@@ -571,7 +598,7 @@ TOOLS = [
         "amount": {"type": "integer", "description": "金額（可選，用於精確匹配）"}
     }, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "delete_todo", "description": "刪除指定的某筆待辦事項（依關鍵字搜尋）", "parameters": {"type": "object", "properties": {"keyword": {"type": "string"}}, "required": ["keyword"]}}},
-   {"type": "function", "function": {"name": "add_work_task", "description": "新增工作任務到工作清單。用戶說「X之前要做/交/完成/生出Y」、「X截止的Y」、「X前要Y」、「要在X前完成Y」都呼叫此工具。description只填工作內容，不含任何時間詞；deadline填計算後的截止日期。", "parameters": {"type": "object", "properties": {
+   {"type": "function", "function": {"name": "add_work_task", "description": "新增工作任務。說「X前要Y」或任何工作安排均呼叫此工具。description只填工作內容不含時間詞；若含日期區間如「燒機測試 [7/13~7/15]」，原樣保留在 description，deadline 留空，函式自動展開每日建立；否則 deadline 填截止日 YYYY-MM-DD。", "parameters": {"type": "object", "properties": {
         "description": {"type": "string", "description": "工作任務內容，不含日期時間詞。例：「生出LC-300測試SOP」而非「下禮拜二前生出LC-300測試SOP」"},
         "deadline": {"type": "string", "description": "截止日期 YYYY-MM-DD。任何時間表達（下禮拜二、下週五、月底、X號前等）都計算成具體日期後填入。"}
     }, "required": ["description"]}}},
@@ -612,7 +639,7 @@ SYSTEM_PROMPT = (
     "6.清空刪除全部待辦呼叫 clear_todos；"
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
-    "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
+    "9.工作任務新增：訊息表達「X前要Y」或任何工作安排，呼叫 add_work_task；description只填工作內容不含時間詞；若描述含 [M/D~M/D] 日期區間（如 [7/13~7/15]），原樣保留在 description，deadline 留空；否則 deadline 填 YYYY-MM-DD；"
     "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
     "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
     "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；下下週/下下禮拜→period=next_next_week；"
