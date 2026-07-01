@@ -337,7 +337,7 @@ def postpone_work_task(keyword: str, new_deadline: str) -> str:
     return f"✅ 已將「{'、'.join(names)}」延期至 {new_deadline}"
 
 
-def list_work_tasks(period: str = "all") -> str:
+def list_work_tasks(period: str = "all", date: str = None) -> str:
     """List pending work tasks, optionally filtered by period."""
     results, qerr = _notion_query_all(
         NOTION_WORK_DB_ID,
@@ -353,6 +353,16 @@ def list_work_tasks(period: str = "all") -> str:
     week_end = week_start + datetime.timedelta(days=6)             # 本週日
     next_week_start = week_start + datetime.timedelta(days=7)
     next_week_end = week_start + datetime.timedelta(days=13)
+    month_start = today.replace(day=1)
+    if today.month == 12:
+        next_month_start = today.replace(year=today.year + 1, month=1, day=1)
+    else:
+        next_month_start = today.replace(month=today.month + 1, day=1)
+    month_end = next_month_start - datetime.timedelta(days=1)
+    next_month_end = (next_month_start.replace(month=next_month_start.month + 1, day=1)
+                      if next_month_start.month < 12
+                      else next_month_start.replace(year=next_month_start.year + 1, month=1, day=1)
+                      ) - datetime.timedelta(days=1)
 
     overdue, today_tasks, upcoming, no_deadline = [], [], [], []
     for r in results:
@@ -370,11 +380,28 @@ def list_work_tasks(period: str = "all") -> str:
         else:
             no_deadline.append(name)
 
-    # 依 period 篩選
-    if period == "today":
-        overdue_f, today_f = overdue, today_tasks
-        upcoming_f, no_deadline_f = [], []
-        label, upcoming_label = "今天", "今天到期"
+    # 精確日期查詢（today/明天/後天/任意日期）
+    if date:
+        date = date.replace("/", "-").replace(".", "-")
+        try:
+            target = datetime.date.fromisoformat(date)
+        except ValueError:
+            return f"❌ 日期格式錯誤：{date}"
+        label = target.strftime("%m/%d") if target != today else "今天"
+        if target == today:
+            overdue_f, today_f = overdue, today_tasks
+            upcoming_f, no_deadline_f = [], []
+            upcoming_label = "今天到期"
+        elif target < today:
+            overdue_f = [(d, n) for d, n in overdue if d == target]
+            today_f, upcoming_f, no_deadline_f = [], [], []
+            upcoming_label = f"{label}到期"
+        else:
+            overdue_f, today_f = [], []
+            upcoming_f = [(d, n) for d, n in upcoming if d == target]
+            no_deadline_f = []
+            upcoming_label = f"{label}到期"
+    # 週期查詢
     elif period == "this_week":
         overdue_f, today_f = overdue, today_tasks
         upcoming_f = [(d, n) for d, n in upcoming if d <= week_end]
@@ -385,6 +412,16 @@ def list_work_tasks(period: str = "all") -> str:
         upcoming_f = [(d, n) for d, n in upcoming if next_week_start <= d <= next_week_end]
         no_deadline_f = []
         label, upcoming_label = "下禮拜", "下禮拜到期"
+    elif period == "this_month":
+        overdue_f, today_f = overdue, today_tasks
+        upcoming_f = [(d, n) for d, n in upcoming if d <= month_end]
+        no_deadline_f = []
+        label, upcoming_label = "本月", "本月到期"
+    elif period == "next_month":
+        overdue_f, today_f = [], []
+        upcoming_f = [(d, n) for d, n in upcoming if next_month_start <= d <= next_month_end]
+        no_deadline_f = []
+        label, upcoming_label = "下個月", "下個月到期"
     elif period == "overdue":
         overdue_f, today_f = overdue, []
         upcoming_f, no_deadline_f = [], []
@@ -531,8 +568,9 @@ TOOLS = [
         "keyword": {"type": "string", "description": "工作任務關鍵字"},
         "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
     }, "required": ["keyword", "new_deadline"]}}},
-    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單，可按時段篩選。問「下禮拜/下週」用 next_week，「本週/這週」用 this_week，「今天」用 today，「逾期」用 overdue，否則用 all。", "parameters": {"type": "object", "properties": {
-        "period": {"type": "string", "enum": ["all", "today", "this_week", "next_week", "overdue"], "description": "篩選範圍：all=全部, today=今天截止, this_week=本週, next_week=下週/下禮拜, overdue=逾期未完成"}
+    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單。指定日期（今天/明天/後天/X月X日/具體日期）用 date=YYYY-MM-DD；週期用 period（this_week本週/next_week下週/this_month本月/next_month下個月/overdue逾期/all全部）。date 優先於 period。", "parameters": {"type": "object", "properties": {
+        "period": {"type": "string", "enum": ["all", "this_week", "next_week", "this_month", "next_month", "overdue"], "description": "週期篩選：this_week=本週/這週, next_week=下週/下禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期未完成, all=全部"},
+        "date": {"type": "string", "description": "精確日期 YYYY-MM-DD。今天/明天/後天/X月X日/大後天等時間表達都計算成具體日期後填入。有 date 時忽略 period。"}
     }}}},
 ]
 
@@ -551,7 +589,10 @@ SYSTEM_PROMPT = (
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
     "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
-    "10.查詢工作任務清單呼叫 list_work_tasks；問「下禮拜/下週」傳 period=next_week，「本週/這週」傳 period=this_week，「今天」傳 period=today，「逾期」傳 period=overdue，沒指定時段傳 period=all；"
+    "10.查詢工作任務清單呼叫 list_work_tasks；"
+    "指定日期（今天/明天/後天/大後天/X月X日/下週二等具體某天）計算成 YYYY-MM-DD 傳 date 參數；"
+    "週期查詢：本週/這週→period=this_week，下週/下禮拜→period=next_week，本月/這個月→period=this_month，下個月→period=next_month，逾期→period=overdue，未指定→period=all；"
+    "date 有值時忽略 period；"
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
