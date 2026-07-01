@@ -496,13 +496,17 @@ def morning_reminder():
         weekday = today.weekday()  # 0=Mon ... 5=Sat 6=Sun
         day_names = ["（週一）", "（週二）", "（週三）", "（週四）", "（週五）", "（週六）", "（週日）"]
 
-        if weekday >= 4:  # 週五/週末 → 顯示下週工作
+        name = _get_line_display_name(uid)
+        if weekday >= 5:  # 週六/週日 → 只看下週
             content = list_work_tasks(period="next_week")
-            name = _get_line_display_name(uid)
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
-        else:  # 平日 → 顯示今天+本週
+        elif weekday == 4:  # 週五 → 本週 + 下週
+            this_week = list_work_tasks(period="this_week")
+            next_week_content = list_work_tasks(period="next_week")
+            content = this_week + "\n\n" + next_week_content
+            greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
+        else:  # 週一至週四 → 今天+本週
             content = list_work_tasks(period="this_week")
-            name = _get_line_display_name(uid)
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
         push_message(uid, greeting + content)
