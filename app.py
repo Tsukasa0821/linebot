@@ -353,6 +353,8 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
     week_end = week_start + datetime.timedelta(days=6)             # 本週日
     next_week_start = week_start + datetime.timedelta(days=7)
     next_week_end = week_start + datetime.timedelta(days=13)
+    next_next_week_start = week_start + datetime.timedelta(days=14)
+    next_next_week_end = week_start + datetime.timedelta(days=20)
     month_start = today.replace(day=1)
     if today.month == 12:
         next_month_start = today.replace(year=today.year + 1, month=1, day=1)
@@ -422,6 +424,11 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
         upcoming_f = [(d, n) for d, n in upcoming if next_month_start <= d <= next_month_end]
         no_deadline_f = []
         label, upcoming_label = "下個月", "下個月到期"
+    elif period == "next_next_week":
+        overdue_f, today_f = [], []
+        upcoming_f = [(d, n) for d, n in upcoming if next_next_week_start <= d <= next_next_week_end]
+        no_deadline_f = []
+        label, upcoming_label = "下下禮拜", "下下禮拜到期"
     elif period == "overdue":
         overdue_f, today_f = overdue, []
         upcoming_f, no_deadline_f = [], []
@@ -573,12 +580,13 @@ TOOLS = [
         "■ 精確日期（今天/明天/後天/大後天/X月X日/下週二等某一天）→ 計算 YYYY-MM-DD 傳 date\n"
         "■ 本週/這週/這禮拜 → period=this_week\n"
         "■ 下週/下禮拜/下個禮拜 → period=next_week\n"
+        "■ 下下週/下下禮拜/下下個禮拜 → period=next_next_week\n"
         "■ 本月/這個月 → period=this_month\n"
         "■ 下個月/下月 → period=next_month\n"
         "■ 逾期/過期/已過截止 → period=overdue\n"
         "■ 完全沒說時間才用 period=all"
     ), "parameters": {"type": "object", "properties": {
-        "period": {"type": "string", "enum": ["all", "this_week", "next_week", "this_month", "next_month", "overdue"], "description": "this_week=本週/這週/這禮拜, next_week=下週/下禮拜/下個禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期, all=全部（無時間限定時才用）"},
+        "period": {"type": "string", "enum": ["all", "this_week", "next_week", "next_next_week", "this_month", "next_month", "overdue"], "description": "this_week=本週/這週/這禮拜, next_week=下週/下禮拜/下個禮拜, next_next_week=下下週/下下禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期, all=全部（無時間限定時才用）"},
         "date": {"type": "string", "description": "精確單日 YYYY-MM-DD。今天/明天/後天/大後天/X月X日/下週二等均計算成具體日期。有此參數時 period 無效。"}
     }, "required": ["period"]}}},
 ]
@@ -600,7 +608,7 @@ SYSTEM_PROMPT = (
     "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
     "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
     "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
-    "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；"
+    "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；下下週/下下禮拜→period=next_next_week；"
     "本月/這個月→period=this_month；下個月→period=next_month；逾期/過期→period=overdue；"
     "完全沒提時間才用 period=all；"
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
