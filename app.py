@@ -500,10 +500,11 @@ def morning_reminder():
         if weekday >= 5:  # 週六/週日 → 只看下週
             content = list_work_tasks(period="next_week")
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
-        elif weekday == 4:  # 週五 → 本週 + 下週
+        elif weekday == 4:  # 週五 → 今天 + 本週 + 下週
+            today_content = list_work_tasks(date=str(today))
             this_week = list_work_tasks(period="this_week")
             next_week_content = list_work_tasks(period="next_week")
-            content = this_week + "\n\n" + next_week_content
+            content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
         else:  # 週一至週四 → 今天+本週
             content = list_work_tasks(period="this_week")
