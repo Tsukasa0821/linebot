@@ -337,8 +337,8 @@ def postpone_work_task(keyword: str, new_deadline: str) -> str:
     return f"✅ 已將「{'、'.join(names)}」延期至 {new_deadline}"
 
 
-def list_work_tasks() -> str:
-    """List all pending work tasks sorted by deadline."""
+def list_work_tasks(period: str = "all") -> str:
+    """List pending work tasks, optionally filtered by period."""
     results, qerr = _notion_query_all(
         NOTION_WORK_DB_ID,
         {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
@@ -349,8 +349,12 @@ def list_work_tasks() -> str:
         return "🎉 目前沒有待處理的工作任務！"
 
     today = _tw_now().date()
-    overdue, today_tasks, upcoming, no_deadline = [], [], [], []
+    week_start = today - datetime.timedelta(days=today.weekday())  # 本週一
+    week_end = week_start + datetime.timedelta(days=6)             # 本週日
+    next_week_start = week_start + datetime.timedelta(days=7)
+    next_week_end = week_start + datetime.timedelta(days=13)
 
+    overdue, today_tasks, upcoming, no_deadline = [], [], [], []
     for r in results:
         props = r["properties"]
         name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
@@ -366,26 +370,52 @@ def list_work_tasks() -> str:
         else:
             no_deadline.append(name)
 
-    overdue.sort(key=lambda x: x[0])
-    today_tasks.sort(key=lambda x: x[0])
-    upcoming.sort(key=lambda x: x[0])
+    # 依 period 篩選
+    if period == "today":
+        overdue_f, today_f = overdue, today_tasks
+        upcoming_f, no_deadline_f = [], []
+        label, upcoming_label = "今天", "今天到期"
+    elif period == "this_week":
+        overdue_f, today_f = overdue, today_tasks
+        upcoming_f = [(d, n) for d, n in upcoming if d <= week_end]
+        no_deadline_f = []
+        label, upcoming_label = "本週", "本週到期"
+    elif period == "next_week":
+        overdue_f, today_f = [], []
+        upcoming_f = [(d, n) for d, n in upcoming if next_week_start <= d <= next_week_end]
+        no_deadline_f = []
+        label, upcoming_label = "下禮拜", "下禮拜到期"
+    elif period == "overdue":
+        overdue_f, today_f = overdue, []
+        upcoming_f, no_deadline_f = [], []
+        label, upcoming_label = "逾期", "逾期"
+    else:  # all
+        overdue_f, today_f = overdue, today_tasks
+        upcoming_f, no_deadline_f = upcoming, no_deadline
+        label, upcoming_label = "全部", "即將到期"
 
-    lines = ["📋 工作任務清單"]
-    if overdue:
+    for lst in (overdue_f, today_f, upcoming_f):
+        lst.sort(key=lambda x: x[0])
+
+    if not (overdue_f or today_f or upcoming_f or no_deadline_f):
+        return f"🎉 {label}沒有待處理的工作任務！"
+
+    lines = [f"📋 工作任務清單（{label}）"]
+    if overdue_f:
         lines.append("\n⚠️ 逾期：")
-        for d, n in overdue:
+        for d, n in overdue_f:
             lines.append(f"  • {n}（截止：{d.strftime('%m/%d')}）")
-    if today_tasks:
+    if today_f:
         lines.append("\n📌 今天截止：")
-        for _, n in today_tasks:
+        for _, n in today_f:
             lines.append(f"  • {n}")
-    if upcoming:
-        lines.append("\n📅 即將到期：")
-        for d, n in upcoming:
+    if upcoming_f:
+        lines.append(f"\n📅 {upcoming_label}：")
+        for d, n in upcoming_f:
             lines.append(f"  • {n}（{d.strftime('%m/%d')}）")
-    if no_deadline:
+    if no_deadline_f:
         lines.append("\n📝 進行中（無截止日期）：")
-        for n in no_deadline:
+        for n in no_deadline_f:
             lines.append(f"  • {n}")
 
     return "\n".join(lines)
@@ -501,7 +531,9 @@ TOOLS = [
         "keyword": {"type": "string", "description": "工作任務關鍵字"},
         "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
     }, "required": ["keyword", "new_deadline"]}}},
-    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單，按截止日期排序，顯示逾期/今天/本週/無截止日期", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "list_work_tasks", "description": "查詢工作任務清單，可按時段篩選。問「下禮拜/下週」用 next_week，「本週/這週」用 this_week，「今天」用 today，「逾期」用 overdue，否則用 all。", "parameters": {"type": "object", "properties": {
+        "period": {"type": "string", "enum": ["all", "today", "this_week", "next_week", "overdue"], "description": "篩選範圍：all=全部, today=今天截止, this_week=本週, next_week=下週/下禮拜, overdue=逾期未完成"}
+    }}}},
 ]
 
 SYSTEM_PROMPT = (
@@ -519,7 +551,7 @@ SYSTEM_PROMPT = (
     "7.刪除指定花費呼叫 delete_expense；"
     "8.刪除指定待辦呼叫 delete_todo；"
     "9.工作任務新增：訊息表達「要在某時間前完成/做/交/生出/準備某工作」、「某時間截止要交某工作」、「X前要Y」、或任何含截止時間的工作安排，呼叫 add_work_task；description只填工作內容不含時間詞，deadline將時間表達（下禮拜二、下週五、月底、X號前等）計算成 YYYY-MM-DD；沒有截止時間的工作也可新增，deadline留空；"
-    "10.查詢工作任務清單呼叫 list_work_tasks；"
+    "10.查詢工作任務清單呼叫 list_work_tasks；問「下禮拜/下週」傳 period=next_week，「本週/這週」傳 period=this_week，「今天」傳 period=today，「逾期」傳 period=overdue，沒指定時段傳 period=all；"
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
