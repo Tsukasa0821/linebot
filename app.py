@@ -55,6 +55,8 @@ NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
 NOTION_EXPENSE_DB_ID = os.environ.get("NOTION_EXPENSE_DB_ID", "")
 NOTION_TODO_DB_ID = os.environ.get("NOTION_TODO_DB_ID", "")
 NOTION_WORK_DB_ID = os.environ.get("NOTION_WORK_DB_ID", "")
+NOTION_MEMO_DB_ID = os.environ.get("NOTION_MEMO_DB_ID", "")
+_memo_db_id_cache = NOTION_MEMO_DB_ID
 
 NOTION_HEADERS = {
     "Authorization": f"Bearer {NOTION_API_KEY}",
@@ -272,6 +274,47 @@ def delete_todo(keyword: str) -> str:
 
 # ─── Work task functions ──────────────────────────────────────────────────────
 
+def _get_or_create_memo_db() -> str:
+    global _memo_db_id_cache
+    if _memo_db_id_cache:
+        return _memo_db_id_cache
+    try:
+        r = requests.post("https://api.notion.com/v1/search", headers=NOTION_HEADERS,
+                          json={"query": "備忘錄", "filter": {"property": "object", "value": "database"}})
+        if r.status_code == 200:
+            for result in r.json().get('results', []):
+                title = ''.join(t.get('plain_text', '') for t in result.get('title', []))
+                if '備忘錄' in title:
+                    _memo_db_id_cache = result['id'].replace('-', '')
+                    return _memo_db_id_cache
+        rw = requests.get(f"https://api.notion.com/v1/databases/{NOTION_WORK_DB_ID}", headers=NOTION_HEADERS)
+        if rw.status_code != 200:
+            return ''
+        parent = rw.json().get('parent', {})
+        if parent.get('type') == 'workspace':
+            r2 = requests.post("https://api.notion.com/v1/search", headers=NOTION_HEADERS,
+                               json={"filter": {"property": "object", "value": "page"}, "page_size": 1})
+            pages = r2.json().get('results', []) if r2.status_code == 200 else []
+            if not pages:
+                return ''
+            parent = {"type": "page_id", "page_id": pages[0]['id']}
+        rc = requests.post("https://api.notion.com/v1/databases", headers=NOTION_HEADERS,
+                           json={
+                               "parent": parent,
+                               "title": [{"type": "text", "text": {"content": "備忘錄"}}],
+                               "properties": {
+                                   "標籤": {"title": {}},
+                                   "內容": {"rich_text": {}}
+                               }
+                           })
+        if rc.status_code == 200:
+            _memo_db_id_cache = rc.json()['id'].replace('-', '')
+            return _memo_db_id_cache
+    except Exception as e:
+        print(f"_get_or_create_memo_db error: {e}")
+    return ''
+
+
 def add_work_task(description: str, deadline: str = None) -> str:
     """Add work task(s). Detects [M/D~M/D] range and creates one Notion entry per date."""
     range_match = re.search(r'\[(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})\]', description)
@@ -370,6 +413,41 @@ def batch_add_work_tasks(content: str) -> str:
     if created: result_parts.append(f"✅ 已新增 {len(created)} 筆：\n" + "\n".join(f"  • {c}" for c in created))
     if errors: result_parts.append("❌ 失敗：\n" + "\n".join(f"  • {e}" for e in errors))
     return "\n".join(result_parts)
+
+def save_memo(tag: str, content: str) -> str:
+    """Save a memo with a tag for later retrieval."""
+    db_id = _get_or_create_memo_db()
+    if not db_id:
+        return "❌ 無法建立備忘錄資料庫，請在 Render 設定 NOTION_MEMO_DB_ID 環境變數"
+    chunks = [content[i:i+2000] for i in range(0, min(len(content), 10000), 2000)]
+    rich_text = [{"type": "text", "text": {"content": c}} for c in chunks]
+    props = {
+        "標籤": {"title": [{"text": {"content": tag[:100]}}]},
+        "內容": {"rich_text": rich_text}
+    }
+    res = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS,
+                        json={"parent": {"database_id": db_id}, "properties": props})
+    return f"✅ 已儲存備忘錄「{tag}」" if res.status_code == 200 else f"❌ 儲存失敗：{res.text[:100]}"
+
+
+def get_memo(keyword: str) -> str:
+    """Retrieve memo by keyword."""
+    db_id = _get_or_create_memo_db()
+    if not db_id:
+        return "❌ 備忘錄資料庫未設定"
+    results, err = _notion_query_all(db_id,
+        {"filter": {"property": "標籤", "title": {"contains": keyword}}})
+    if err:
+        return f"❌ 查詢失敗：{err}"
+    if not results:
+        return f"找不到含「{keyword}」的備忘錄"
+    page = results[0]
+    tag_parts = page["properties"]["標籤"]["title"]
+    tag = "".join(t["plain_text"] for t in tag_parts) if tag_parts else ""
+    rt = page["properties"]["內容"]["rich_text"]
+    content = "".join(b["plain_text"] for b in rt) if rt else ""
+    return f"📋 [{tag}]\n\n{content}"
+
 
 def complete_work_task(keyword: str) -> str:
     """Mark a work task as completed."""
@@ -659,6 +737,13 @@ TOOLS = [
     {"type": "function", "function": {"name": "batch_add_work_tasks", "description": "批量解析多行工作計畫並新增至Notion。當用戶傳入含日期前綴的多行工作安排（如：7/2~7/3 : 完成燒機架組裝\n7/13 : 測試品到貨）時呼叫，傳入完整文字。", "parameters": {"type": "object", "properties": {
         "content": {"type": "string", "description": "含日期工作安排的多行文字"}
     }, "required": ["content"]}}},
+    {"type": "function", "function": {"name": "save_memo", "description": "儲存備忘錄。收到含[標籤]的完整訊息或文件時呼叫，tag填[...]裡的文字，content填完整原始訊息。", "parameters": {"type": "object", "properties": {
+        "tag": {"type": "string", "description": "備忘錄標籤（從[...]提取）"},
+        "content": {"type": "string", "description": "完整原始訊息"}
+    }, "required": ["tag", "content"]}}},
+    {"type": "function", "function": {"name": "get_memo", "description": "用關鍵字查詢備忘錄，回傳原始完整訊息。", "parameters": {"type": "object", "properties": {
+        "keyword": {"type": "string", "description": "查詢關鍵字"}
+    }, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "complete_work_task", "description": "標記工作任務為已完成", "parameters": {"type": "object", "properties": {
         "keyword": {"type": "string", "description": "工作任務關鍵字"}
     }, "required": ["keyword"]}}},
@@ -698,6 +783,8 @@ SYSTEM_PROMPT = (
     "8.刪除指定待辦呼叫 delete_todo；"
     "9.工作任務新增：訊息表達「X前要Y」或任何工作安排，呼叫 add_work_task；description只填工作內容不含時間詞；若描述含 [M/D~M/D] 日期區間（如 [7/13~7/15]），原樣保留在 description，deadline 留空；否則 deadline 填 YYYY-MM-DD；"
     "9b.批量工作計畫：若訊息含多行工作安排（行首有日期 M/D: 或 M/D~M/D: 格式），呼叫 batch_add_work_tasks 並傳入完整文字；"
+    "9c.訊息含[標籤]且有多行工作計畫，除呼叫 batch_add_work_tasks 外，同時呼叫 save_memo（tag=標籤文字，content=原始完整訊息）；"
+    "9d.用戶輸入單獨[關鍵字]格式（如[燒機室]），呼叫 get_memo(keyword=關鍵字)；"
     "10.查詢工作任務清單呼叫 list_work_tasks，訊息含時間範圍時必須傳對應參數（禁止用預設 all）："
     "今天→date=今天日期；明天→date=明天日期；後天/大後天→date=計算日期；X月X日→date=YYYY-MM-DD；"
     "本週/這週/這禮拜→period=this_week；下週/下禮拜/下個禮拜→period=next_week；下下週/下下禮拜→period=next_next_week；"
@@ -739,6 +826,10 @@ def run_tool(name: str, args: dict) -> str:
         return delete_expense(**args)
     elif name == "delete_todo":
         return delete_todo(**args)
+    elif name == "save_memo":
+        return save_memo(**args)
+    elif name == "get_memo":
+        return get_memo(**args)
     elif name == "batch_add_work_tasks":
         return batch_add_work_tasks(**args)
     elif name == "add_work_task":
@@ -894,6 +985,9 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         "測試週四早安提醒": 3, "測試週五早安提醒": 4,
         "測試週六早安提醒": 5, "測試週日早安提醒": 6,
     }
+    memo_q = re.match(r'^\[(.+)\]$', user_text.strip())
+    if memo_q:
+        return get_memo(memo_q.group(1))
     if user_text.strip() in _TEST_DAY_MAP:
         return _simulate_morning_reminder(_TEST_DAY_MAP[user_text.strip()], user_id)
 
