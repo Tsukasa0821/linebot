@@ -991,7 +991,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
     if user_text.strip() in _TEST_DAY_MAP:
         return _simulate_morning_reminder(_TEST_DAY_MAP[user_text.strip()], user_id)
 
-        data = groq_chat(messages, TOOLS)
+    data = groq_chat(messages, TOOLS)
     if "choices" in data:
         msg = data["choices"][0]["message"]
         tool_calls = msg.get("tool_calls")
