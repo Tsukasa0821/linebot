@@ -476,61 +476,21 @@ def morning_reminder():
         if not uid or not NOTION_WORK_DB_ID:
             return
 
-        today = _tw_now().date()
-        week_end = today + datetime.timedelta(days=7)
+        tw_now = _tw_now()
+        today = tw_now.date()
+        weekday = today.weekday()  # 0=Mon ... 5=Sat 6=Sun
+        day_names = ["（週一）", "（週二）", "（週三）", "（週四）", "（週五）", "（週六）", "（週日）"]
 
-        results, qerr = _notion_query_all(
-            NOTION_WORK_DB_ID,
-            {"filter": {"property": "狀態", "select": {"equals": "待處理"}}}
-        )
-        if qerr or not results:
-            return
+        if weekday >= 5:  # 週末 → 顯示下週工作
+            content = list_work_tasks(period="next_week")
+            greeting = f"🌅 早安！{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
+        else:  # 平日 → 顯示今天+本週
+            content = list_work_tasks(period="this_week")
+            greeting = f"🌅 早安！{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
-        overdue, today_tasks, upcoming, no_deadline = [], [], [], []
-        for r in results:
-            props = r["properties"]
-            name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
-            dl_prop = props.get("截止日期", {}).get("date")
-            if dl_prop and dl_prop.get("start"):
-                dl = datetime.date.fromisoformat(dl_prop["start"])
-                if dl < today:
-                    overdue.append((dl, name))
-                elif dl == today:
-                    today_tasks.append((dl, name))
-                elif dl <= week_end:
-                    upcoming.append((dl, name))
-            else:
-                no_deadline.append(name)
-
-        overdue.sort(key=lambda x: x[0])
-        today_tasks.sort(key=lambda x: x[0])
-        upcoming.sort(key=lambda x: x[0])
-
-        if not (overdue or today_tasks or upcoming or no_deadline):
-            return
-
-        lines = [f"🌅 早安！{today.strftime('%m/%d')} 工作提醒："]
-        if overdue:
-            lines.append("\n⚠️ 逾期未完成：")
-            for d, n in overdue:
-                lines.append(f"  • {n}（截止：{d.strftime('%m/%d')}）")
-        if today_tasks:
-            lines.append("\n📌 今天截止：")
-            for _, n in today_tasks:
-                lines.append(f"  • {n}")
-        if upcoming:
-            lines.append("\n📅 本週即將到期：")
-            for d, n in upcoming:
-                lines.append(f"  • {n}（{d.strftime('%m/%d')}）")
-        if no_deadline:
-            lines.append("\n📝 進行中（無截止日期）：")
-            for n in no_deadline:
-                lines.append(f"  • {n}")
-
-        push_message(uid, "\n".join(lines))
+        push_message(uid, greeting + content)
     except Exception as e:
         print(f"morning_reminder error: {e}")
-
 
 # Schedule morning reminder at 9am Taiwan time = 1am UTC
 _scheduler = BackgroundScheduler()
