@@ -1078,10 +1078,9 @@ def handle_message(user_text: str, user_id: str = "") -> str:
                 continue  # Rule 15/17: block add_expense unless message starts with [花費]
             result = run_tool(fname, args)
             results.append(result)
-        if _work_expense:
-            if user_id:
-                _PENDING_EXPENSE_MSG[user_id] = user_text
-            results.append("這些花費是已花費還是預計花費？")
+        print(f"[R17] work_expense={_work_expense}", flush=True)
+        if _work_expense and user_id:
+            _PENDING_EXPENSE_MSG[user_id] = user_text
         return "\n".join(filter(None, results))
     err = data.get("error", {})
     if err.get("code") == "tool_use_failed":
@@ -1143,6 +1142,9 @@ def webhook():
             except Exception as e:
                 reply = f"⚠️ 出錯了：{str(e)}"
             push_message(user_id, reply)
+            # Rule 17: ask expense type as separate message after work results
+            if user_id in _PENDING_EXPENSE_MSG and _PENDING_EXPENSE_MSG[user_id] == user_text:
+                push_message(user_id, "這些花費是已花費還是預計花費？")
             _save_user_state(user_id)
     threading.Thread(target=process_events, daemon=True).start()
     return "OK"
