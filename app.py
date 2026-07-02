@@ -56,6 +56,7 @@ NOTION_EXPENSE_DB_ID = os.environ.get("NOTION_EXPENSE_DB_ID", "")
 NOTION_TODO_DB_ID = os.environ.get("NOTION_TODO_DB_ID", "")
 NOTION_WORK_DB_ID = os.environ.get("NOTION_WORK_DB_ID", "")
 NOTION_MEMO_DB_ID = os.environ.get("NOTION_MEMO_DB_ID", "")
+MORNING_TOKEN = os.environ.get("MORNING_TOKEN", "friday2026")
 _memo_db_id_cache = NOTION_MEMO_DB_ID
 
 NOTION_HEADERS = {
@@ -811,6 +812,7 @@ SYSTEM_PROMPT = (
     "11.完成某工作任務（說完成了、做好了、搞定了、已處理）呼叫 complete_work_task；"
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
+    "13.如果用戶抱怨早安提醒沒收到（例如「你沒提醒我」「早上沒收到提醒」），直接解釋是因為服務重啟可能導致排程失效，不要新增任何待辦事項或工作任務。"
 )
 
 
@@ -1116,6 +1118,15 @@ def health():
         pass
     return "Friday在線上 ✅"
 
+
+
+@app.route("/morning", methods=["GET", "POST"])
+def morning_trigger():
+    token = request.args.get("token", "")
+    if token != MORNING_TOKEN:
+        return "Unauthorized", 401
+    morning_reminder()
+    return "OK"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
