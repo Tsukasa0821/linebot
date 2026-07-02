@@ -384,7 +384,7 @@ def batch_add_work_tasks(content: str) -> str:
                 if e_dt < s_dt: e_dt = datetime.date(year+1, e_m, e_d)
             except ValueError:
                 errors.append(f"日期錯誤：{stripped[:20]}"); continue
-                        if s_dt == e_dt:
+            if s_dt == e_dt:
                 _date_prop = {"start": str(s_dt)}
                 label = f"{s_dt.strftime('%m/%d')} {task}"
             else:
