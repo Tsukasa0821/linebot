@@ -1078,7 +1078,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
                 continue  # Rule 15/17: block add_expense unless message starts with [花費]
             result = run_tool(fname, args)
             results.append(result)
-        print(f"[R17] work_expense={_work_expense}", flush=True)
+        print(f"[R17] work_expense={_work_expense}, has_wo={'工作待辦' in user_text}, has_fe={'花費' in user_text}, start={user_text[:80]!r}", flush=True)
         if _work_expense and user_id:
             _PENDING_EXPENSE_MSG[user_id] = user_text
         return "\n".join(filter(None, results))
