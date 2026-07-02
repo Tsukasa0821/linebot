@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # Pending delete confirmations per user
 pending_delete = {}  # {user_id: {"name": str, "args": dict}}
-DELETE_TOOLS = {"clear_expenses", "clear_todos", "delete_expense", "delete_todo"}
+DELETE_TOOLS = {"clear_expenses", "clear_todos", "clear_work_tasks", "delete_expense", "delete_todo"}
 
 _STATE_FILE = "/tmp/friday_state.json"
 _STARTUP_TIME = time.time()
@@ -501,6 +501,18 @@ def postpone_work_task(keyword: str, new_deadline: str) -> str:
     return f"✅ 已將「{'、'.join(names)}」延期至 {new_deadline}"
 
 
+
+def clear_work_tasks() -> str:
+    results, qerr = _notion_query_all(NOTION_WORK_DB_ID, {})
+    if qerr:
+        return f"❌ 查詢失敗：{qerr}"
+    if not results:
+        return "✅ 工作任務本來就是空的"
+    for r in results:
+        requests.patch(f"https://api.notion.com/v1/pages/{r['id']}", headers=NOTION_HEADERS, json={"archived": True})
+    return f"✅ 已清空 {len(results)} 筆工作任務"
+
+
 def list_work_tasks(period: str = "all", date: str = None) -> str:
     """List pending work tasks, optionally filtered by period."""
     results, qerr = _notion_query_all(
@@ -756,6 +768,7 @@ TOOLS = [
         "keyword": {"type": "string", "description": "工作任務關鍵字"},
         "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
     }, "required": ["keyword", "new_deadline"]}}},
+    {"type": "function", "function": {"name": "clear_work_tasks", "description": "清空工作任務清單（需確認）", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "list_work_tasks", "description": (
         "查詢工作任務清單。訊息含任何時間範圍時必須傳對應參數，不可用預設值！\n"
         "■ 精確日期（今天/明天/後天/大後天/X月X日/下週二等某一天）→ 計算 YYYY-MM-DD 傳 date\n"
@@ -843,6 +856,8 @@ def run_tool(name: str, args: dict) -> str:
         return complete_work_task(**args)
     elif name == "postpone_work_task":
         return postpone_work_task(**args)
+    elif name == "clear_work_tasks":
+        return clear_work_tasks()
     elif name == "list_work_tasks":
         return list_work_tasks(**args)
     return "未知工具"
@@ -924,6 +939,17 @@ def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
         pending_delete[user_id] = {"page_ids": ids}
         desc = "\n".join(lines)
         return f"⚠️ 確認要刪除所有 {len(ids)} 筆待辦事項嗎？\n\n{desc}\n\n請回覆【確認刪除】確認，或回覆【取消】取消。"
+    elif fname == "clear_work_tasks":
+        results, qerr = _notion_query_all(NOTION_WORK_DB_ID, {})
+        if qerr:
+            return f"❌ 查詢失敗：{qerr}"
+        if not results:
+            return "🔕 工作任務本來就是空的"
+        lines_out = [" • " + (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）") for r in results]
+        ids = [r["id"] for r in results]
+        pending_delete[user_id] = {"page_ids": ids}
+        desc = "\n".join(lines_out)
+        return f"⚠️ 確認要清空工作任務共 {len(ids)} 筆？\n\n{desc}\n\n回覆【確認刪除】確認，或回覆【取消】取消。"
     elif fname == "delete_expense":
         keyword = args.get("keyword", "")
         date = args.get("date")
