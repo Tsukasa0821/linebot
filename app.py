@@ -15,6 +15,7 @@ app = Flask(__name__)
 
 # Pending delete confirmations per user
 pending_delete = {}  # {user_id: {"name": str, "args": dict}}
+_PENDING_EXPENSE_MSG = {}  # {user_id: original_message} for rule 17
 DELETE_TOOLS = {"clear_expenses", "clear_todos", "clear_work_tasks", "delete_expense", "delete_todo"}
 
 _STATE_FILE = "/tmp/friday_state.json"
@@ -1045,6 +1046,17 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         return get_memo(memo_q.group(1))
     if user_text.strip() in _TEST_DAY_MAP:
         return _simulate_morning_reminder(_TEST_DAY_MAP[user_text.strip()], user_id)
+    # Rule 17: handle pending expense type reply
+    if user_id and user_id in _PENDING_EXPENSE_MSG:
+        t = user_text.strip()
+        if '已花費' in t:
+            orig = _PENDING_EXPENSE_MSG.pop(user_id)
+            return orig.replace('花費：', '已花費：').replace('花費:', '已花費:')
+        elif '預計花費' in t:
+            orig = _PENDING_EXPENSE_MSG.pop(user_id)
+            return orig.replace('花費：', '預計花費：').replace('花費:', '預計花費:')
+        else:
+            _PENDING_EXPENSE_MSG.pop(user_id, None)
 
     data = groq_chat(messages, TOOLS)
     if "choices" in data:
@@ -1053,14 +1065,23 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         if not tool_calls:
             return msg.get("content") or "（無法理解指令）"
         results = []
+        _work_expense = bool(
+            re.match(r'^\[?工作待辦[\]：:]', user_text.strip()) and
+            re.search(r'花費[：:]', user_text)
+        )
         for tc in tool_calls:
             fname = tc["function"]["name"]
             args = json.loads(tc["function"]["arguments"]) or {}
             if fname in DELETE_TOOLS and user_id:
                 return _prepare_delete(user_id, fname, args)
+            if fname == "add_expense" and not user_text.strip().startswith("[花費]"):
+                continue  # Rule 15/17: block add_expense unless message starts with [花費]
             result = run_tool(fname, args)
             results.append(result)
-        return "\n".join(results)
+        if _work_expense and user_id:
+            _PENDING_EXPENSE_MSG[user_id] = user_text
+            results.append("這些花費是已花費還是預計花費？")
+        return "\n".join(filter(None, results))
     err = data.get("error", {})
     if err.get("code") == "tool_use_failed":
         failed = err.get("failed_generation", "")
