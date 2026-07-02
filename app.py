@@ -553,13 +553,12 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
         if dl_prop and dl_prop.get("start"):
             _start_d = datetime.date.fromisoformat(dl_prop["start"])
             _end_d = datetime.date.fromisoformat(dl_prop["end"]) if dl_prop.get("end") else _start_d
-            dl = _end_d
             if _end_d < today:
-                overdue.append((dl, name))
+                overdue.append((_start_d, _end_d, name))
             elif _start_d <= today <= _end_d:
-                today_tasks.append((dl, name))
+                today_tasks.append((_start_d, _end_d, name))
             else:
-                upcoming.append((dl, name))
+                upcoming.append((_start_d, _end_d, name))
         else:
             no_deadline.append(name)
 
@@ -576,38 +575,38 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
             upcoming_f, no_deadline_f = [], []
             upcoming_label = "今天到期"
         elif target < today:
-            overdue_f = [(d, n) for d, n in overdue if d == target]
+            overdue_f = [(s, e, n) for s, e, n in overdue if e == target]
             today_f, upcoming_f, no_deadline_f = [], [], []
             upcoming_label = f"{label}到期"
         else:
             overdue_f, today_f = [], []
-            upcoming_f = [(d, n) for d, n in upcoming if d == target]
+            upcoming_f = [(s, e, n) for s, e, n in upcoming if e == target]
             no_deadline_f = []
             upcoming_label = f"{label}到期"
     # 週期查詢
     elif period == "this_week":
         overdue_f, today_f = overdue, today_tasks
-        upcoming_f = [(d, n) for d, n in upcoming if d <= week_end]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming if e <= week_end]
         no_deadline_f = []
         label, upcoming_label = "本週", "本週到期"
     elif period == "next_week":
         overdue_f, today_f = [], []
-        upcoming_f = [(d, n) for d, n in upcoming if next_week_start <= d <= next_week_end]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming if next_week_start <= e <= next_week_end]
         no_deadline_f = []
         label, upcoming_label = "下禮拜", "下禮拜到期"
     elif period == "this_month":
         overdue_f, today_f = overdue, today_tasks
-        upcoming_f = [(d, n) for d, n in upcoming if d <= month_end]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming if e <= month_end]
         no_deadline_f = []
         label, upcoming_label = "本月", "本月到期"
     elif period == "next_month":
         overdue_f, today_f = [], []
-        upcoming_f = [(d, n) for d, n in upcoming if next_month_start <= d <= next_month_end]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming if next_month_start <= e <= next_month_end]
         no_deadline_f = []
         label, upcoming_label = "下個月", "下個月到期"
     elif period == "next_next_week":
         overdue_f, today_f = [], []
-        upcoming_f = [(d, n) for d, n in upcoming if next_next_week_start <= d <= next_next_week_end]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming if next_next_week_start <= e <= next_next_week_end]
         no_deadline_f = []
         label, upcoming_label = "下下禮拜", "下下禮拜到期"
     elif period == "overdue":
@@ -625,24 +624,37 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
     if not (overdue_f or today_f or upcoming_f or no_deadline_f):
         return f"🎉 {label}沒有待處理的工作任務！"
 
+    _wm = period in ("this_week", "next_week", "next_month")
+
+    def _ds(s, e):
+        if s == e:
+            return f"（{e.strftime('%m/%d')}）"
+        return f"（{s.strftime('%m/%d')}~{e.strftime('%m/%d')}）"
+
     lines = [f"📋 工作任務清單（{label}）"]
     if overdue_f:
         lines.append("\n⚠️ 逾期：")
-        for d, n in overdue_f:
-            lines.append(f"  • {n}（截止：{d.strftime('%m/%d')}）")
+        for s, e, n in overdue_f:
+            lines.append(f"  • {n}{_ds(s, e)}")
     if today_f:
-        lines.append("\n📌 今天截止：")
-        for _, n in today_f:
-            lines.append(f"  • {n}")
+        if not _wm:
+            lines.append("\n🚨 今天截止：")
+        for s, e, n in today_f:
+            if _wm:
+                lines.append(f"  • {n}{_ds(s, e)}")
+            elif s < e:
+                lines.append(f"  • {n}（{e.month}/{e.day}截止）")
+            else:
+                lines.append(f"  • {n}")
     if upcoming_f:
-        lines.append(f"\n📅 {upcoming_label}：")
-        for d, n in upcoming_f:
-            lines.append(f"  • {n}（{d.strftime('%m/%d')}）")
+        if not _wm:
+            lines.append(f"\n📅 {upcoming_label}：")
+        for s, e, n in upcoming_f:
+            lines.append(f"  • {n}{_ds(s, e)}")
     if no_deadline_f:
-        lines.append("\n📝 進行中（無截止日期）：")
+        lines.append("\n📌 無截止日期：")
         for n in no_deadline_f:
             lines.append(f"  • {n}")
-
     return "\n".join(lines)
 
 
@@ -656,11 +668,11 @@ def _simulate_morning_reminder(weekday_override: int, uid: str) -> str:
         content = list_work_tasks(period="next_week")
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n以下是下週工作預覽：\n\n"
     elif weekday_override == 4:  # 週五
-        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "目前沒有待處理" not in x]
+        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "沒有待處理的工作任務" not in x]
         content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
     else:  # 週一至週四 → 今天 + 本週
-        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "目前沒有待處理" not in x]
+        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "沒有待處理的工作任務" not in x]
         content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
     return greeting + content
@@ -702,11 +714,11 @@ def morning_reminder():
             content = list_work_tasks(period="next_week")
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
         elif weekday == 4:  # 週五 → 今天 + 本週 + 下週
-            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "目前沒有待處理" not in x]
+            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "沒有待處理的工作任務" not in x]
             content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
         else:  # 週一至週四 → 今天 + 本週
-            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "目前沒有待處理" not in x]
+            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "沒有待處理的工作任務" not in x]
             content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
@@ -948,7 +960,16 @@ def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
             return f"❌ 查詢失敗：{qerr}"
         if not results:
             return "🔕 工作任務本來就是空的"
-        lines_out = [" • " + (r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）") for r in results]
+        lines_out = []
+        for r in results:
+            _n = r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）"
+            _dp = r["properties"].get("截止日期", {}).get("date")
+            if _dp and _dp.get("start"):
+                _s = _dp["start"][5:].replace("-", "/")
+                _e = (_dp.get("end") or _dp["start"])[5:].replace("-", "/")
+                lines_out.append(f"  • {_n}（{_s}~{_e}）" if _s != _e else f"  • {_n}（{_s}）")
+            else:
+                lines_out.append(f"  • {_n}")
         ids = [r["id"] for r in results]
         pending_delete[user_id] = {"page_ids": ids}
         desc = "\n".join(lines_out)
