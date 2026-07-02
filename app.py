@@ -652,15 +652,12 @@ def _simulate_morning_reminder(weekday_override: int, uid: str) -> str:
         content = list_work_tasks(period="next_week")
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n以下是下週工作預覽：\n\n"
     elif weekday_override == 4:  # 週五
-        today_content = list_work_tasks(date=str(today))
-        this_week = list_work_tasks(period="this_week")
-        next_week_content = list_work_tasks(period="next_week")
-        content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
+        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "目前沒有待處理" not in x]
+        content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
     else:  # 週一至週四 → 今天 + 本週
-        today_content = list_work_tasks(date=str(today))
-        this_week = list_work_tasks(period="this_week")
-        content = today_content + "\n\n" + this_week
+        _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "目前沒有待處理" not in x]
+        content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
         greeting = f"🧪 [測試-{day_names[weekday_override].strip('（）')}] 早安！{name}\n\n"
     return greeting + content
 
@@ -701,15 +698,12 @@ def morning_reminder():
             content = list_work_tasks(period="next_week")
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n以下是下週工作預覽：\n\n"
         elif weekday == 4:  # 週五 → 今天 + 本週 + 下週
-            today_content = list_work_tasks(date=str(today))
-            this_week = list_work_tasks(period="this_week")
-            next_week_content = list_work_tasks(period="next_week")
-            content = today_content + "\n\n" + this_week + "\n\n" + next_week_content
+            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week"), list_work_tasks(period="next_week")] if "目前沒有待處理" not in x]
+            content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
         else:  # 週一至週四 → 今天 + 本週
-            today_content = list_work_tasks(date=str(today))
-            this_week = list_work_tasks(period="this_week")
-            content = today_content + "\n\n" + this_week
+            _p = [x for x in [list_work_tasks(date=str(today)), list_work_tasks(period="this_week")] if "目前沒有待處理" not in x]
+            content = "\n\n".join(_p) if _p else "🎉 目前沒有待處理的工作任務！"
             greeting = f"🌅 早安！{name}，{today.strftime('%m/%d')}{day_names[weekday]}\n\n"
 
         push_message(uid, greeting + content)
