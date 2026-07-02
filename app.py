@@ -384,16 +384,18 @@ def batch_add_work_tasks(content: str) -> str:
                 if e_dt < s_dt: e_dt = datetime.date(year+1, e_m, e_d)
             except ValueError:
                 errors.append(f"日期錯誤：{stripped[:20]}"); continue
-            d2 = s_dt
-            while d2 <= e_dt:
-                props = {"名稱": {"title": [{"text": {"content": task}}]},
-                         "狀態": {"select": {"name": "待處理"}},
-                         "截止日期": {"date": {"start": str(d2)}}}
-                r2 = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS,
-                                   json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
-                label = f"{d2.strftime('%m/%d')} {task}"
-                (created if r2.status_code == 200 else errors).append(label)
-                d2 += datetime.timedelta(days=1)
+                        if s_dt == e_dt:
+                _date_prop = {"start": str(s_dt)}
+                label = f"{s_dt.strftime('%m/%d')} {task}"
+            else:
+                _date_prop = {"start": str(s_dt), "end": str(e_dt)}
+                label = f"{s_dt.strftime('%m/%d')}~{e_dt.strftime('%m/%d')} {task}"
+            props = {"名稱": {"title": [{"text": {"content": task}}]},
+                     "狀態": {"select": {"name": "待處理"}},
+                     "截止日期": {"date": _date_prop}}
+            r2 = requests.post("https://api.notion.com/v1/pages", headers=NOTION_HEADERS,
+                               json={"parent": {"database_id": NOTION_WORK_DB_ID}, "properties": props})
+            (created if r2.status_code == 200 else errors).append(label)
         elif sm2:
             task = sm2.group(2).split('(')[0].split('（')[0].rstrip('。').strip()
             try:
@@ -549,10 +551,12 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
         name = props["名稱"]["title"][0]["plain_text"] if props["名稱"]["title"] else "（無）"
         dl_prop = props.get("截止日期", {}).get("date")
         if dl_prop and dl_prop.get("start"):
-            dl = datetime.date.fromisoformat(dl_prop["start"])
-            if dl < today:
+            _start_d = datetime.date.fromisoformat(dl_prop["start"])
+            _end_d = datetime.date.fromisoformat(dl_prop["end"]) if dl_prop.get("end") else _start_d
+            dl = _end_d
+            if _end_d < today:
                 overdue.append((dl, name))
-            elif dl == today:
+            elif _start_d <= today <= _end_d:
                 today_tasks.append((dl, name))
             else:
                 upcoming.append((dl, name))
