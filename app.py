@@ -1065,9 +1065,9 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         if not tool_calls:
             return msg.get("content") or "（無法理解指令）"
         results = []
-        _work_expense = bool(
-            re.match(r'^\[?工作待辦[\]：:]', user_text.strip()) and
-            re.search(r'花費[：:]', user_text)
+        _work_expense = (
+            '工作待辦' in user_text and
+            ('花費：' in user_text or '花費:' in user_text)
         )
         for tc in tool_calls:
             fname = tc["function"]["name"]
@@ -1078,8 +1078,9 @@ def handle_message(user_text: str, user_id: str = "") -> str:
                 continue  # Rule 15/17: block add_expense unless message starts with [花費]
             result = run_tool(fname, args)
             results.append(result)
-        if _work_expense and user_id:
-            _PENDING_EXPENSE_MSG[user_id] = user_text
+        if _work_expense:
+            if user_id:
+                _PENDING_EXPENSE_MSG[user_id] = user_text
             results.append("這些花費是已花費還是預計花費？")
         return "\n".join(filter(None, results))
     err = data.get("error", {})
