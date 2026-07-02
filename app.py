@@ -637,8 +637,7 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
         for s, e, n in overdue_f:
             lines.append(f"  • {n}{_ds(s, e)}")
     if today_f:
-        if not _wm:
-            lines.append("\n🚨 今天截止：")
+        lines.append("\n🚨 今天截止：")
         for s, e, n in today_f:
             if _wm:
                 lines.append(f"  • {n}{_ds(s, e)}")
