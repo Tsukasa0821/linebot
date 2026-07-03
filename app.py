@@ -16,7 +16,7 @@ app = Flask(__name__)
 # Pending delete confirmations per user
 pending_delete = {}  # {user_id: {"name": str, "args": dict}}
 _PENDING_EXPENSE_MSG = {}  # {user_id: original_message} for rule 17
-DELETE_TOOLS = {"clear_expenses", "clear_todos", "clear_work_tasks", "delete_expense", "delete_todo"}
+DELETE_TOOLS = {"clear_expenses", "clear_todos", "clear_work_tasks", "delete_expense", "delete_todo", "delete_work_task"}
 
 _STATE_FILE = "/tmp/friday_state.json"
 _STARTUP_TIME = time.time()
@@ -517,6 +517,22 @@ def clear_work_tasks() -> str:
     return f"✅ 已清空 {len(results)} 筆工作任務"
 
 
+def delete_work_task(keyword: str) -> str:
+    """Delete specific work task(s) by keyword."""
+    results, qerr = _notion_query_all(NOTION_WORK_DB_ID, {})
+    if qerr:
+        return f"❌ 查詢失敗：{qerr}"
+    matched = [r for r in results if keyword in (
+        r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else ""
+    )]
+    if not matched:
+        return f"❌ 找不到含「{keyword}」的工作任務"
+    for r in matched:
+        requests.patch(f"https://api.notion.com/v1/pages/{r['id']}", headers=NOTION_HEADERS, json={"archived": True})
+    names = [r["properties"]["名稱"]["title"][0]["plain_text"] for r in matched if r["properties"]["名稱"]["title"]]
+    return f"✅ 已刪除：{'、'.join(names)}"
+
+
 def list_work_tasks(period: str = "all", date: str = None) -> str:
     """List pending work tasks, optionally filtered by period."""
     results, qerr = _notion_query_all(
@@ -780,6 +796,7 @@ TOOLS = [
         "new_deadline": {"type": "string", "description": "新截止日期 YYYY-MM-DD"}
     }, "required": ["keyword", "new_deadline"]}}},
     {"type": "function", "function": {"name": "clear_work_tasks", "description": "清空工作任務清單（需確認）", "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {"name": "delete_work_task", "description": "刪除指定工作任務（依關鍵字）。用户說「清除/刪除」加具體任務名稱時呼叫，不是清空全部。", "parameters": {"type": "object", "properties": {"keyword": {"type": "string", "description": "工作任務關鍵字，如任務名稱片段"}}, "required": ["keyword"]}}},
     {"type": "function", "function": {"name": "list_work_tasks", "description": (
         "查詢工作任務清單。訊息含任何時間範圍時必須傳對應參數，不可用預設值！\n"
         "■ 精確日期（今天/明天/後天/大後天/X月X日/下週二等某一天）→ 計算 YYYY-MM-DD 傳 date\n"
@@ -823,6 +840,7 @@ SYSTEM_PROMPT = (
     "12.延期工作任務截止日期呼叫 postpone_work_task，計算新日期後填入 new_deadline。"
     "永遠呼叫工具，不得自行回答。繁體中文，回覆簡短。"
     "13.如果用戶抱怨早安提醒沒收到（例如「你沒提醒我」「早上沒收到提醒」），直接解釋是因為服務重啟可能導致排程失效，不要新增任何待辦事項或工作任務。"
+    "13b.刪除指定工作任務呼叫 delete_work_task（keyword=任務名稱關鍵字）；只有明確說「清空全部工作任務/工作待辦」且無具體任務名稱時才呼叫 clear_work_tasks。"
     "14.只有在用戶訊息以「[工作待辦]」開頭時，才可以使用新增工作任務的工具（add_work_task、batch_add_work_tasks）；沒有此開頭詞，絕對不可新增工作任務。"
     "15.只有在用戶訊息以「[花費]」開頭時，才可以使用新增花費的工具（add_expense）；沒有此開頭詞，絕對不可記錄花費。"
     "16.用戶輸入日期加工作項目（例如「7/3工作項目」「明天的工作」「今天任務」），一律使用 list_work_tasks 查詢，不可呼叫 add_work_task 或 batch_add_work_tasks。"
@@ -874,6 +892,8 @@ def run_tool(name: str, args: dict) -> str:
         return postpone_work_task(**args)
     elif name == "clear_work_tasks":
         return clear_work_tasks()
+    elif name == "delete_work_task":
+        return delete_work_task(**args)
     elif name == "list_work_tasks":
         return list_work_tasks(**args)
     return "未知工具"
@@ -975,6 +995,30 @@ def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
         pending_delete[user_id] = {"page_ids": ids}
         desc = "\n".join(lines_out)
         return f"⚠️ 確認要清空工作任務共 {len(ids)} 筆？\n\n{desc}\n\n回覆【確認刪除】確認，或回覆【取消】取消。"
+    elif fname == "delete_work_task":
+        keyword = args.get("keyword", "")
+        results, qerr = _notion_query_all(NOTION_WORK_DB_ID, {})
+        if qerr:
+            return f"\u274c 查詢失敗：{qerr}"
+        matched = [r for r in results if keyword in (
+            r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else ""
+        )]
+        if not matched:
+            return f"\u274c 找不到含「{keyword}」的工作任務"
+        lines_out = []
+        for r in matched:
+            _n = r["properties"]["名稱"]["title"][0]["plain_text"] if r["properties"]["名稱"]["title"] else "（無）"
+            _dp = r["properties"].get("截止日期", {}).get("date")
+            if _dp and _dp.get("start"):
+                _s = _dp["start"][5:].replace("-", "/")
+                _e = (_dp.get("end") or _dp["start"])[5:].replace("-", "/")
+                lines_out.append(f"  • {_n}（{_s}~{_e}）" if _s != _e else f"  • {_n}（{_s}）")
+            else:
+                lines_out.append(f"  • {_n}")
+        ids = [r["id"] for r in matched]
+        pending_delete[user_id] = {"page_ids": ids}
+        desc = "\n".join(lines_out)
+        return f"\u26a0️ 確認要刪除以下 {len(ids)} 筆工作任務？\n\n{desc}\n\n回覆【確認刪除】確認，或回覆【取消】取消。"
     elif fname == "delete_expense":
         keyword = args.get("keyword", "")
         date = args.get("date")
