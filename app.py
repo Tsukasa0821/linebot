@@ -1092,7 +1092,7 @@ def _list_tasks_in_range(start_date: str, end_date: str) -> str:
             if t_start <= ed and t_end >= sd:
                 matched.append(r)
     if not matched:
-        return f"\u{26c8}\ufe0f {start_date[5:].replace('-','/')}" + "~" + f"{end_date[5:].replace('-','/')} \u6c92\u6709\u5f85\u8655\u7406\u7684\u5de5\u4f5c\u4efb\u52d9"
+        return f"\u26a0\ufe0f {start_date[5:].replace('-','/')}" + "~" + f"{end_date[5:].replace('-','/')} \u6c92\u6709\u5f85\u8655\u7406\u7684\u5de5\u4f5c\u4efb\u52d9"
     label = f"{start_date[5:].replace('-','/')}~{end_date[5:].replace('-','/')}"
     lines_out = [f"\U0001f4cb \u5de5\u4f5c\u4efb\u52d9\u6e05\u55ae\uff08{label}\uff09"]
     for r in matched:
