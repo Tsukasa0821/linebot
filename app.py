@@ -319,7 +319,7 @@ def _get_or_create_memo_db() -> str:
 
 def add_work_task(description: str, deadline: str = None) -> str:
     """Add work task(s). Detects [M/D~M/D] range and creates one Notion entry per date."""
-    range_match = re.search(r'\[(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})\]', description)
+    range_match = re.search(r'\[(\d{1,2}/\d{1,2})[~\uff5e\u301c](\d{1,2}/\d{1,2})\]', description)
     if range_match:
         clean_desc = (description[:range_match.start()] + description[range_match.end():]).strip()
         year = _tw_now().year
@@ -373,7 +373,7 @@ def batch_add_work_tasks(content: str) -> str:
             continue
         if (stripped.startswith('[') or '花費' in stripped or stripped.startswith('(')):
             continue
-        rm = re.match(r'^(\d{1,2}/\d{1,2})\s*[~\uff5e]\s*(\d{1,2}/\d{1,2})\s*[\uff1a:]\s*(.+)', stripped)
+        rm = re.match(r'^(\d{1,2}/\d{1,2})\s*[~\uff5e\u301c]\s*(\d{1,2}/\d{1,2})\s*[\uff1a:]\s*(.+)', stripped)
         sm2 = re.match(r'^(\d{1,2}/\d{1,2})\s*[\uff1a:]\s*(.+)', stripped) if not rm else None
         if rm:
             task = rm.group(3).split('(')[0].split('（')[0].rstrip('。').strip()
