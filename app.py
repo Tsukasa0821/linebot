@@ -1110,6 +1110,7 @@ def webhook():
             if event["message"].get("type") != "text":
                 continue
             user_text = event["message"]["text"].strip()
+            user_text = user_text.replace('\u301c', '~').replace('\uff5e', '~')  # normalize tilde variants
             user_id = event["source"]["userId"]
             # Handle pending delete confirmation
             if user_id in pending_delete:
