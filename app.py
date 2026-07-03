@@ -743,9 +743,9 @@ def morning_reminder():
     except Exception as e:
         print(f"morning_reminder error: {e}")
 
-# Schedule morning reminder at 9am Taiwan time = 1am UTC
-_scheduler = BackgroundScheduler()
-_scheduler.add_job(morning_reminder, 'cron', hour=1, minute=0)
+# Schedule morning reminder at 9am Taiwan time (Asia/Taipei)
+_scheduler = BackgroundScheduler(timezone="Asia/Taipei")
+_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0)
 _scheduler.start()
 
 
