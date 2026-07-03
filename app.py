@@ -16,6 +16,7 @@ app = Flask(__name__)
 # Pending delete confirmations per user
 pending_delete = {}  # {user_id: {"name": str, "args": dict}}
 _PENDING_EXPENSE_MSG = {}  # {user_id: original_message} for rule 17
+_PENDING_DUP_ADD = {}  # {user_id: content_str} for duplicate task confirmation
 DELETE_TOOLS = {"clear_expenses", "clear_todos", "clear_work_tasks", "delete_expense", "delete_todo", "delete_work_task"}
 
 _STATE_FILE = "/tmp/friday_state.json"
@@ -1071,6 +1072,41 @@ def _prepare_delete(user_id: str, fname: str, args: dict) -> str:
     return "❌ 未知操作"
 
 
+def _list_tasks_in_range(start_date: str, end_date: str) -> str:
+    """List work tasks whose date range overlaps with [start_date, end_date]."""
+    results, qerr = _notion_query_all(
+        NOTION_WORK_DB_ID,
+        {"filter": {"property": "\u72c0\u614b", "select": {"equals": "\u5f85\u8655\u7406"}}}
+    )
+    if qerr:
+        return f"\u274c \u67e5\u8a62\u5931\u6557\uff1a{qerr}"
+    matched = []
+    import datetime
+    sd = datetime.date.fromisoformat(start_date)
+    ed = datetime.date.fromisoformat(end_date)
+    for r in results:
+        _dp = r["properties"].get("\u622a\u6b62\u65e5\u671f", {}).get("date")
+        if _dp:
+            t_start = datetime.date.fromisoformat(_dp["start"])
+            t_end = datetime.date.fromisoformat(_dp.get("end") or _dp["start"])
+            if t_start <= ed and t_end >= sd:
+                matched.append(r)
+    if not matched:
+        return f"\u{26c8}\ufe0f {start_date[5:].replace('-','/')}" + "~" + f"{end_date[5:].replace('-','/')} \u6c92\u6709\u5f85\u8655\u7406\u7684\u5de5\u4f5c\u4efb\u52d9"
+    label = f"{start_date[5:].replace('-','/')}~{end_date[5:].replace('-','/')}"
+    lines_out = [f"\U0001f4cb \u5de5\u4f5c\u4efb\u52d9\u6e05\u55ae\uff08{label}\uff09"]
+    for r in matched:
+        _n = r["properties"]["\u540d\u7a31"]["title"][0]["plain_text"] if r["properties"]["\u540d\u7a31"]["title"] else "\uff08\u7121\uff09"
+        _dp2 = r["properties"].get("\u622a\u6b62\u65e5\u671f", {}).get("date")
+        if _dp2:
+            _s = _dp2["start"][5:].replace("-", "/")
+            _e = (_dp2.get("end") or _dp2["start"])[5:].replace("-", "/")
+            lines_out.append(f"  \u2022 {_n}\uff08{_s}~{_e}\uff09" if _s != _e else f"  \u2022 {_n}\uff08{_s}\uff09")
+        else:
+            lines_out.append(f"  \u2022 {_n}")
+    return "\n".join(lines_out)
+
+
 def handle_message(user_text: str, user_id: str = "") -> str:
     _now_tw = _tw_now()
     today = _now_tw.strftime("%Y-%m-%d")
@@ -1102,6 +1138,34 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         else:
             _PENDING_EXPENSE_MSG.pop(user_id, None)
 
+    # Pre-process: 清除工作待辦 + specific task -> delete_work_task (bypass Groq)
+    _stripped_ut = user_text.strip()
+    if _stripped_ut.startswith('清除工作待辦') and user_id:
+        _ut_lines = _stripped_ut.split('\n')
+        if len(_ut_lines) > 1:
+            _task_line = _ut_lines[1].strip()
+            _cm = re.search(r'[：:]\s*(.+)', _task_line)
+            _kw = _cm.group(1).strip() if _cm else _task_line
+            return _prepare_delete(user_id, 'delete_work_task', {'keyword': _kw[:30]})
+
+    # Pre-process: date_range + 工作待辦 -> list tasks in range (bypass Groq)
+    _dr_m = re.match(r'^(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})\s*工作待辦', _stripped_ut)
+    if _dr_m:
+        _yr = _tw_now().year
+        _m1, _d1 = map(int, _dr_m.group(1).split('/'))
+        _m2, _d2 = map(int, _dr_m.group(2).split('/'))
+        _sd = f"{_yr:04d}-{_m1:02d}-{_d1:02d}"
+        _ed = f"{_yr:04d}-{_m2:02d}-{_d2:02d}"
+        return _list_tasks_in_range(_sd, _ed)
+
+    # Pre-process: pending duplicate add confirmation
+    if user_id and user_id in _PENDING_DUP_ADD:
+        _dup_content = _PENDING_DUP_ADD.pop(user_id)
+        if user_text.strip() in ('是', '要', '好', '確認', '確定'):
+            return batch_add_work_tasks(_dup_content)
+        else:
+            return '\u2705 已取消，未新增重複任務。'
+
     data = groq_chat(messages, TOOLS)
     if "choices" in data:
         msg = data["choices"][0]["message"]
@@ -1120,6 +1184,25 @@ def handle_message(user_text: str, user_id: str = "") -> str:
                 return _prepare_delete(user_id, fname, args)
             if fname == "add_expense" and not user_text.strip().startswith("[花費]"):
                 continue  # Rule 15/17: block add_expense unless message starts with [花費]
+            # Duplicate check for batch_add_work_tasks
+            if fname == "batch_add_work_tasks" and user_id:
+                _content = args.get("content", "")
+                _new_names = []
+                for _tl in _content.split('\n'):
+                    _tl = _tl.strip()
+                    _rm2 = re.match(r'^(\d{1,2}/\d{1,2})[~\uff5e\u301c](\d{1,2}/\d{1,2})\s*[\uff1a:]\s*(.+)', _tl)
+                    _sm3 = re.match(r'^(\d{1,2}/\d{1,2})\s*[\uff1a:]\s*(.+)', _tl) if not _rm2 else None
+                    if _rm2: _new_names.append(_rm2.group(3).strip())
+                    elif _sm3: _new_names.append(_sm3.group(2).strip())
+                if _new_names:
+                    _ex, _ = _notion_query_all(NOTION_WORK_DB_ID, {"filter": {"property": "\u72c0\u614b", "select": {"equals": "\u5f85\u8655\u7406"}}})
+                    _ex_names = [r["properties"]["\u540d\u7a31"]["title"][0]["plain_text"] for r in _ex if r["properties"]["\u540d\u7a31"]["title"]]
+                    _dups = [n for n in _new_names if any(n[:10] in ex or ex[:10] in n for ex in _ex_names)]
+                    if _dups:
+                        _PENDING_DUP_ADD[user_id] = _content
+                        _dup_str = '\u3001'.join(_dups)
+                        results.append(f"\u26a0\ufe0f \u5df2\u6709\u985e\u4f3c\u4efb\u52d9\uff1a{_dup_str}\u3002\u662f\u5426\u9084\u8981\u65b0\u589e\uff1f\u56de\u8986\u300c\u662f\u300d\u78ba\u8a8d\uff0c\u300c\u5426\u300d\u53d6\u6d88\u3002")
+                        continue
             result = run_tool(fname, args)
             results.append(result)
         print(f"[R17] work_expense={_work_expense}, has_wo={'工作待辦' in user_text}, has_fe={'花費' in user_text}, start={user_text[:80]!r}", flush=True)
