@@ -1145,7 +1145,7 @@ def handle_message(user_text: str, user_id: str = "") -> str:
         if len(_ut_lines) > 1:
             _task_line = _ut_lines[1].strip()
             _cm = re.search(r'[：:]\s*(.+)', _task_line)
-            _kw = _cm.group(1).strip() if _cm else _task_line
+            _kw = (_cm.group(1).strip() if _cm else _task_line).rstrip('\u3002\uff01\uff1f\u3001.,! ')
             return _prepare_delete(user_id, 'delete_work_task', {'keyword': _kw[:30]})
 
     # Pre-process: date_range + 工作待辦 -> list tasks in range (bypass Groq)
