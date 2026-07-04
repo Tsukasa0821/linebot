@@ -711,14 +711,20 @@ def _get_line_display_name(uid: str) -> str:
 
 
 def morning_reminder():
-    """Send morning work task reminder at 9am Taiwan time (scheduled at 1am UTC)."""
+    """Send morning work task reminder at 9am Taiwan time."""
+    print("morning_reminder: triggered")
     try:
-        if not os.path.exists(_STATE_FILE):
-            return
-        with open(_STATE_FILE, encoding="utf-8") as f:
-            state = json.load(f)
-        uid = state.get("uid", "")
+        # NOTIFY_USER_ID env var persists across Render restarts; /tmp/ does not
+        uid = os.environ.get("NOTIFY_USER_ID", "")
+        if not uid:
+            if not os.path.exists(_STATE_FILE):
+                print("morning_reminder: no state file and NOTIFY_USER_ID not set")
+                return
+            with open(_STATE_FILE, encoding="utf-8") as f:
+                state = json.load(f)
+            uid = state.get("uid", "")
         if not uid or not NOTION_WORK_DB_ID:
+            print(f"morning_reminder: abort uid={bool(uid)} NOTION_WORK_DB_ID={bool(NOTION_WORK_DB_ID)}")
             return
 
         tw_now = _tw_now()
@@ -745,7 +751,7 @@ def morning_reminder():
 
 # Schedule morning reminder at 9am Taiwan time (Asia/Taipei)
 _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
-_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0)
+_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0, misfire_grace_time=3600)
 _scheduler.start()
 
 
