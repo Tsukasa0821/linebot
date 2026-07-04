@@ -1245,6 +1245,7 @@ def webhook():
             user_text = event["message"]["text"].strip()
             user_text = user_text.replace('\u301c', '~').replace('\uff5e', '~')  # normalize tilde variants
             user_id = event["source"]["userId"]
+            print(f"LINE uid: {user_id}")  # temp: for NOTIFY_USER_ID setup
             # Handle pending delete confirmation
             if user_id in pending_delete:
                 if user_text == "確認刪除":
