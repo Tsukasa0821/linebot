@@ -417,11 +417,21 @@ def batch_add_work_tasks(content: str) -> str:
     result_parts = []
     if created: result_parts.append(f"✅ 已新增 {len(created)} 筆：\n" + "\n".join(f"  • {c}" for c in created))
     if errors: result_parts.append("❌ 失敗：\n" + "\n".join(f"  • {e}" for e in errors))
-    # Auto-save memo if first line is [tag] or 「」 tag
-    _fl = content.strip().split('\n')[0].strip()
+    # Auto-save memo: [tag]/【tag】 format OR 工作待辦:\n project_title format
+    _memo_lines = content.strip().split('\n')
+    _fl = _memo_lines[0].strip()
     _at = re.match(r'^[\u3010\[](.+)[\u3011\]]$', _fl)
-    if _at and created:
-        save_memo(_at.group(1), content)
+    _memo_tag = None
+    if _at and _at.group(1) not in ('\u5de5\u4f5c\u5f85\u8fa6', '\u5de5\u4f5c\u4efb\u52d9'):
+        _memo_tag = _at.group(1)
+    elif re.match(r'^\u5de5\u4f5c\u5f85\u8fa6[\uff1a:]\s*$', _fl) and len(_memo_lines) > 1:
+        _sl = _memo_lines[1].strip()
+        if _sl and not re.match(r'^\d', _sl) and not _sl.startswith('['):
+            _tm = re.match(r'^([^\uff08\u0028\u3010\[]+)', _sl)
+            if _tm:
+                _memo_tag = _tm.group(1).strip()
+    if _memo_tag and created:
+        save_memo(_memo_tag, content)
     return "\n".join(result_parts)
 
 def save_memo(tag: str, content: str) -> str:
@@ -1177,6 +1187,10 @@ def handle_message(user_text: str, user_id: str = "") -> str:
             _ed = f"{{_yr:04d}}-{{_m2:02d}}-{{_d2:02d}}"
             return _list_tasks_in_range(_sd, _ed)
         else:
+            # Try memo first; if not found, fall back to task keyword filter
+            _memo_r = get_memo(_wt_kw)
+            if '找不到' not in _memo_r and '錯誤' not in _memo_r:
+                return _memo_r
             return list_work_tasks(period="all", keyword=_wt_kw)
 
     # Pre-process: pending duplicate add confirmation
