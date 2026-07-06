@@ -424,12 +424,16 @@ def batch_add_work_tasks(content: str) -> str:
     _memo_tag = None
     if _at and _at.group(1) not in ('\u5de5\u4f5c\u5f85\u8fa6', '\u5de5\u4f5c\u4efb\u52d9'):
         _memo_tag = _at.group(1)
-    elif re.match(r'^\u5de5\u4f5c\u5f85\u8fa6[\uff1a:]\s*$', _fl) and len(_memo_lines) > 1:
-        _sl = _memo_lines[1].strip()
-        if _sl and not re.match(r'^\d', _sl) and not _sl.startswith('['):
-            _tm = re.match(r'^([^\uff08\u0028\u3010\[]+)', _sl)
-            if _tm:
-                _memo_tag = _tm.group(1).strip()
+    elif re.match(r'^\u5de5\u4f5c\u5f85\u8fa6[\uff1a:]', _fl):
+        _inline = re.match(r'^\u5de5\u4f5c\u5f85\u8fa6[\uff1a:]\s*(.+)$', _fl)
+        if _inline:
+            _memo_tag = _inline.group(1).strip()
+        elif len(_memo_lines) > 1:
+            _sl = _memo_lines[1].strip()
+            if _sl and not re.match(r'^\d', _sl) and not _sl.startswith('['):
+                _tm = re.match(r'^([^\uff08\u0028\u3010\[]+)', _sl)
+                if _tm:
+                    _memo_tag = _tm.group(1).strip()
     if _memo_tag:  # save memo even if all tasks were duplicates
         save_memo(_memo_tag, content)
     return "\n".join(result_parts)
