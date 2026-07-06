@@ -451,14 +451,21 @@ def save_memo(tag: str, content: str) -> str:
 
 
 def get_memo(keyword: str) -> str:
-    """Retrieve memo by keyword."""
+    """Retrieve memo by keyword (searches tag first, then content)."""
     db_id = _get_or_create_memo_db()
     if not db_id:
         return "❌ 備忘錄資料庫未設定"
+    # Search by tag first
     results, err = _notion_query_all(db_id,
         {"filter": {"property": "標籤", "title": {"contains": keyword}}})
     if err:
         return f"❌ 查詢失敗：{err}"
+    # If not found by tag, search by content
+    if not results:
+        results2, err2 = _notion_query_all(db_id,
+            {"filter": {"property": "內容", "rich_text": {"contains": keyword}}})
+        if not err2 and results2:
+            results = results2
     if not results:
         return f"找不到含「{keyword}」的備忘錄"
     page = results[0]
