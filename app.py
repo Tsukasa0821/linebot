@@ -534,7 +534,7 @@ def delete_work_task(keyword: str) -> str:
     return f"✅ 已刪除：{'、'.join(names)}"
 
 
-def list_work_tasks(period: str = "all", date: str = None) -> str:
+def list_work_tasks(period: str = "all", date: str = None, keyword: str = None) -> str:
     """List pending work tasks, optionally filtered by period."""
     results, qerr = _notion_query_all(
         NOTION_WORK_DB_ID,
@@ -638,6 +638,14 @@ def list_work_tasks(period: str = "all", date: str = None) -> str:
 
     for lst in (overdue_f, today_f, upcoming_f):
         lst.sort(key=lambda x: x[0])
+
+    if keyword:
+        _kw = keyword.strip()
+        overdue_f = [(s, e, n) for s, e, n in overdue_f if _kw in n]
+        today_f = [(s, e, n) for s, e, n in today_f if _kw in n]
+        upcoming_f = [(s, e, n) for s, e, n in upcoming_f if _kw in n]
+        no_deadline_f = [n for n in no_deadline_f if _kw in n]
+        label = f"含「{_kw}」"
 
     if not (overdue_f or today_f or upcoming_f or no_deadline_f):
         return f"🎉 {label}沒有待處理的工作任務！"
@@ -816,7 +824,8 @@ TOOLS = [
         "■ 完全沒說時間才用 period=all"
     ), "parameters": {"type": "object", "properties": {
         "period": {"type": "string", "enum": ["all", "this_week", "next_week", "next_next_week", "this_month", "next_month", "overdue"], "description": "this_week=本週/這週/這禮拜, next_week=下週/下禮拜/下個禮拜, next_next_week=下下週/下下禮拜, this_month=本月/這個月, next_month=下個月, overdue=逾期, all=全部（無時間限定時才用）"},
-        "date": {"type": "string", "description": "精確單日 YYYY-MM-DD。今天/明天/後天/大後天/X月X日/下週二等均計算成具體日期。有此參數時 period 無效。"}
+        "date": {"type": "string", "description": "精確單日 YYYY-MM-DD。今天/明天/後天/大後天/X月X日/下週二等均計算成具體日期。有此參數時 period 無效。"},
+        "keyword": {"type": "string", "description": "關鍵字過濾，只顯示任務名稱含此關鍵字的任務（如「燒機室」、「Vivian」）。"}
     }, "required": ["period"]}}},
 ]
 
@@ -851,6 +860,7 @@ SYSTEM_PROMPT = (
     "14.只有在用戶訊息以「[工作待辦]」開頭時，才可以使用新增工作任務的工具（add_work_task、batch_add_work_tasks）；沒有此開頭詞，絕對不可新增工作任務。"
     "15.只有在用戶訊息以「[花費]」開頭時，才可以使用新增花費的工具（add_expense）；沒有此開頭詞，絕對不可記錄花費。"
     "16.用戶輸入日期加工作項目（例如「7/3工作項目」「明天的工作」「今天任務」），一律使用 list_work_tasks 查詢，不可呼叫 add_work_task 或 batch_add_work_tasks。"
+    "16b.訊息格式「工作待辦：[關鍵字]」（例如「工作待辦：燒機室」），呼叫 list_work_tasks(period='all', keyword=關鍵字)，絕對不得呼叫 get_memo；"
     "17.若訊息以「[工作待辦]」開頭且同一則訊息含有「花費」區塊：不呼叫 add_expense 不記帳；詢問用戶「這些花費是已花費還是預計花費？」；用戶回覆後，把原訊息中的「花費：」替換為「已花費：」或「預計花費：」，並回傳完整修改後的訊息。"
 )
 
@@ -1154,15 +1164,20 @@ def handle_message(user_text: str, user_id: str = "") -> str:
             _kw = (_cm.group(1).strip() if _cm else _task_line).rstrip('\u3002\uff01\uff1f\u3001.,! ')
             return _prepare_delete(user_id, 'delete_work_task', {'keyword': _kw[:30]})
 
-    # Pre-process: date_range + 工作待辦 -> list tasks in range (bypass Groq)
-    _dr_m = re.match(r'^(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})\s*工作待辦', _stripped_ut)
-    if _dr_m:
-        _yr = _tw_now().year
-        _m1, _d1 = map(int, _dr_m.group(1).split('/'))
-        _m2, _d2 = map(int, _dr_m.group(2).split('/'))
-        _sd = f"{_yr:04d}-{_m1:02d}-{_d1:02d}"
-        _ed = f"{_yr:04d}-{_m2:02d}-{_d2:02d}"
-        return _list_tasks_in_range(_sd, _ed)
+    # Pre-process: 工作待辦：[keyword] -> list_work_tasks with keyword (bypass Groq)
+    _wt_colon = re.match(r'^工作待辦[\uff1a:]\s*(.+)', _stripped_ut)
+    if _wt_colon:
+        _wt_kw = _wt_colon.group(1).strip()
+        _wt_dr2 = re.match(r'^(\d{1,2}/\d{1,2})~(\d{1,2}/\d{1,2})', _wt_kw)
+        if _wt_dr2:
+            _yr = _tw_now().year
+            _m1, _d1 = map(int, _wt_dr2.group(1).split('/'))
+            _m2, _d2 = map(int, _wt_dr2.group(2).split('/'))
+            _sd = f"{{_yr:04d}}-{{_m1:02d}}-{{_d1:02d}}"
+            _ed = f"{{_yr:04d}}-{{_m2:02d}}-{{_d2:02d}}"
+            return _list_tasks_in_range(_sd, _ed)
+        else:
+            return list_work_tasks(period="all", keyword=_wt_kw)
 
     # Pre-process: pending duplicate add confirmation
     if user_id and user_id in _PENDING_DUP_ADD:
