@@ -430,7 +430,7 @@ def batch_add_work_tasks(content: str) -> str:
             _tm = re.match(r'^([^\uff08\u0028\u3010\[]+)', _sl)
             if _tm:
                 _memo_tag = _tm.group(1).strip()
-    if _memo_tag and created:
+    if _memo_tag:  # save memo even if all tasks were duplicates
         save_memo(_memo_tag, content)
     return "\n".join(result_parts)
 
