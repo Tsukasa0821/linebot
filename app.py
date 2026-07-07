@@ -742,6 +742,11 @@ def _get_line_display_name(uid: str) -> str:
 def morning_reminder():
     """Send morning work task reminder at 9am Taiwan time."""
     print("morning_reminder: triggered")
+    # Safety: only send if Taiwan time is 08:00-10:00 (guards against wrong-timezone firing)
+    _tw_h = _tw_now().hour
+    if not (8 <= _tw_h <= 9):
+        print(f"morning_reminder: Taiwan hour={_tw_h}, outside 08-09 window, skip")
+        return
     try:
         # NOTIFY_USER_ID env var persists across Render restarts; /tmp/ does not
         uid = os.environ.get("NOTIFY_USER_ID", "")
@@ -779,8 +784,8 @@ def morning_reminder():
         print(f"morning_reminder error: {e}")
 
 # Schedule morning reminder at 9am Taiwan time (Asia/Taipei)
-_scheduler = BackgroundScheduler(timezone="Asia/Taipei")
-_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0, coalesce=True, max_instances=1)
+_scheduler = BackgroundScheduler()  # defaults to UTC
+_scheduler.add_job(morning_reminder, 'cron', hour=1, minute=0, coalesce=True, max_instances=1)  # 01:00 UTC = 09:00 Taiwan
 _scheduler.start()
 
 
