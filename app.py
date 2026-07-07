@@ -780,7 +780,7 @@ def morning_reminder():
 
 # Schedule morning reminder at 9am Taiwan time (Asia/Taipei)
 _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
-_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0, misfire_grace_time=3600)
+_scheduler.add_job(morning_reminder, 'cron', hour=9, minute=0, coalesce=True, max_instances=1)
 _scheduler.start()
 
 
